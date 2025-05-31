@@ -1,0 +1,535 @@
+#include <glad.h>
+#include <glfw/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+#include <iostream>
+#include <vector>
+#include <random>
+
+#include "stb_image.h"
+
+#include "Shader.h"
+#include "Texture2D.h"
+#include "Mesh.h"
+
+
+// Particle
+struct Particle {
+    glm::vec3 Position, Velocity;
+    glm::vec4 Color;
+    float     Life;
+
+    Particle()
+        : Position(0.0f), Velocity(0.0f), Color(1.0f), Life(0.0f) {
+    }
+};
+
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void processInput(GLFWwindow* window);
+bool compute_probability(double probability);
+unsigned int FirstUnusedWindParticle();
+void RespawnParticle(Particle& particle);
+float getRandomFloat(float min, float max);
+float rand_normal();
+
+const unsigned int SCR_WIDTH = 1600;
+const unsigned int SCR_HEIGHT = 1200;
+
+// camera
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+bool firstMouse = true;
+float yaw = -90.0f;	// yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right so we initially rotate a bit to the left.
+float pitch = 0.0f;
+float lastX = (float)SCR_WIDTH / 2.0;
+float lastY = (float)SCR_HEIGHT / 2.0;
+float fov = 60.0f;
+
+std::default_random_engine generator;
+std::normal_distribution<float> distribution(0.0f, 1.0f);
+
+// timing 
+float deltaTime = 0.0f;	// Time between current frame and last frame
+float lastFrame = 0.0f; // Time of last frame
+
+// wind
+float largeScaleWindMaxAngle = 25.0f;
+float windSpeed = 1.5;
+float windWavePeriod = 50.0f; // seconds for one full wave
+float windWaveFrequency = 2.0f * std::_Pi_val / windWavePeriod;
+glm::vec3 windDirection = glm::normalize(glm::vec3(1.0f, 0.0f, 1.0f));
+glm::vec3 north = glm::vec3(0, 0, 1);
+float windPower = 1.0f;
+
+std::vector<Particle> windParticles;
+unsigned int windParticlesNumber = 200;
+unsigned int lastUsedWindParticle = 0;
+float windParticleSpawnProbability = 0.02f;
+
+// water
+const int gridRes = 256; // Grid resolution
+const int gridSize = 256; // Width/height of the grid
+std::vector<glm::vec3> vertices;
+std::vector<unsigned int> indices;
+
+int main()
+{
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
+    if (window == NULL)
+    {
+        std::cout << "Failed to create GLFW window" << std::endl;
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetCursorPosCallback(window, mouse_callback);
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        std::cout << "Failed to initialize GLAD" << std::endl;
+        return -1;
+    }
+
+    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+
+    Shader texShader(NULL, "resources/shaders/texture/v_texture.glsl", NULL, "resources/shaders/texture/f_texture.glsl");
+    Shader colShader(NULL, "resources/shaders/color/v_color.glsl", NULL, "resources/shaders/color/f_color.glsl");
+    Shader particleShader(NULL, "resources/shaders/wind/v_wind_particle.glsl", NULL, "resources/shaders/wind/f_wind_particle.glsl");
+    Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
+
+    // extures
+    Texture2D cubeTex1("resources/textures/container.jpg", 0);
+    Texture2D cubeTex2("resources/textures/awesomeface.png", 1);
+
+    // cube vertices
+    float cubeVertices[] = {
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
+    };
+
+    unsigned int cubeIndices[] = {
+    0, 1, 3, // first triangle
+    1, 2, 3  // second triangle
+    };
+
+
+    // Vertices of the tetrahedron
+    float tetraVertices[] = {
+        -0.5f, -0.5f, -0.5f, 0.7f, 0.0f, 0.0f,// Vertex 0
+        0.5f, -0.5f, -0.5f, 0.7f, 0.0f, 0.0f, // Vertex 1
+        0.0f, -0.5f, 0.5f, 0.0f, 0.0f, 0.7f, // Vertex 2
+        0.0f, 0.5f, 0.0f,  0.0f, 0.0f, 0.7f// Vertex 3
+    };
+
+    // Indices that define the faces of the tetrahedron
+    unsigned int tetraIndices[] = {
+        0, 1, 2,   // Face 1
+        0, 1, 3,   // Face 2
+        0, 2, 3,   // Face 3
+        1, 2, 3    // Face 4
+    };
+
+    float particle_quad[] = {
+    0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+    1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+
+    0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+    1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+    1.0f, 0.0f, 0.0f, 1.0f, 0.0f
+    };
+
+    float particle_square[] = {
+        0.0f, 1.0f, 0.0f,
+        1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f,
+
+        0.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 0.0f,
+        1.0f, 0.0f, 0.0f
+    };
+
+    // Generate vertices
+    for (int z = 0; z < gridRes; ++z) {
+        for (int x = 0; x < gridRes; ++x) {
+            float xpos = (float)x / (gridRes - 1) * gridSize - gridSize / 2.0f;
+            float zpos = (float)z / (gridRes - 1) * gridSize - gridSize / 2.0f;
+            vertices.emplace_back(glm::vec3(xpos, 0.0f, zpos));
+        }
+    }
+
+    // Generate indices for triangle rendering
+    for (int z = 0; z < gridRes - 1; ++z) {
+        for (int x = 0; x < gridRes - 1; ++x) {
+            int topLeft = z * gridRes + x;
+            int topRight = topLeft + 1;
+            int bottomLeft = (z + 1) * gridRes + x;
+            int bottomRight = bottomLeft + 1;
+
+            // First triangle
+            indices.push_back(topLeft);
+            indices.push_back(bottomLeft);
+            indices.push_back(topRight);
+
+            // Second triangle
+            indices.push_back(topRight);
+            indices.push_back(bottomLeft);
+            indices.push_back(bottomRight);
+        }
+    }
+
+    Mesh cubeMesh(cubeVertices, { 3, 2 });
+    Mesh tetraMesh(tetraVertices, tetraIndices, { 3, 3 });
+    Mesh particleMesh(particle_square, { 3 });
+
+    // setting up water
+    GLuint WaterVAO, WaterVBO, WaterEBO;
+    glGenVertexArrays(1, &WaterVAO);
+    glGenBuffers(1, &WaterVBO);
+    glGenBuffers(1, &WaterEBO);
+
+
+    // configuring water
+    glBindVertexArray(WaterVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, WaterVBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, WaterEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+
+    glBindVertexArray(0);
+
+    texShader.use();
+    texShader.setInt("texture1", cubeTex1.getSlot());
+    texShader.setInt("texture2", cubeTex2.getSlot());
+
+    for (unsigned int i = 0; i < windParticlesNumber; ++i)
+        windParticles.push_back(Particle());
+
+
+    // render loop
+    while (!glfwWindowShouldClose(window))
+    {
+        // per-frame time logic
+        float currentFrame = (float)glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // input
+        processInput(window);
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+        // render
+        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // bind textures on corresponding texture units
+        cubeTex1.bind();
+        cubeTex2.bind();
+
+        // wind
+        float windBearing = glm::degrees(acos(glm::dot(glm::normalize(windDirection), glm::normalize(north)))); // wind direction in degrees where 0 or 360 is north
+        float largeWindAngle = sin(glfwGetTime() * windWaveFrequency) * largeScaleWindMaxAngle;
+        float largeWindAngleRad = glm::radians(largeWindAngle);
+        if (largeWindAngleRad < 0.0f) {
+            largeWindAngleRad *= 0.4f;
+        }
+        else {
+            largeWindAngleRad *= 0.6f;
+        }
+        glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), largeWindAngleRad, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 largeWindDirection = glm::vec3(rotationMatrix * glm::vec4(windDirection, 0.0f));
+        glm::vec3 temp = glm::vec3(0.0f, 1.0f, 0.0f);
+        largeWindDirection = glm::normalize(windDirection + (glm::normalize(glm::cross(windDirection, temp)) * (glm::length(windDirection) * sin(largeWindAngleRad))));
+
+        // spawning particles
+        if (compute_probability(windParticleSpawnProbability)) {
+            int unusedParticle = FirstUnusedWindParticle();
+            RespawnParticle(windParticles[unusedParticle]);
+        }
+        // update all particles
+        for (unsigned int i = 0; i < windParticlesNumber; ++i)
+        {
+            Particle& p = windParticles[i];
+            p.Life -= deltaTime; // reduce life
+            if (p.Life > 0.0f)
+            {	// particle is alive, thus update
+                float windFactor = (p.Position.x + p.Position.y + p.Position.z);
+                windFactor /= 4; // add the wind wavelenght;
+                windFactor += glfwGetTime();
+                glm::vec3 perParticleWindVector = glm::normalize(windDirection + (glm::normalize(glm::cross(windDirection, temp)) * (glm::length(windDirection) * sin(sin(windFactor * windWaveFrequency) * largeScaleWindMaxAngle))));
+                p.Position += (perParticleWindVector * windSpeed) * deltaTime;
+                if (p.Life < 1.0f)
+                    p.Color.a -= deltaTime * 2.5f;
+            }
+        }
+
+        glm::mat4 view, projection;
+        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+
+        // draw cube with texShader
+        texShader.use();
+        texShader.setMat4("view", view);
+        texShader.setMat4("projection", projection);
+        glm::mat4 cubeModel = glm::mat4(1.0f);
+        cubeModel = glm::translate(cubeModel, glm::vec3(-0.5f, 0.0f, 0.0f));
+        texShader.setMat4("model", cubeModel);
+        
+        cubeMesh.Draw();
+        //glBindVertexArray(CubeVAO);
+        //glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // draw tetrahedron with colShader
+        colShader.use();
+        colShader.setMat4("view", view);
+        colShader.setMat4("projection", projection);
+        glm::mat4 tetraModel = glm::mat4(1.0f);
+        tetraModel = glm::translate(tetraModel, glm::vec3(0.5f, 0.0f, 0.0f));
+        tetraModel = glm::rotate(tetraModel, largeWindAngleRad, glm::vec3(0.0f, 1.0f, 0.0f));
+        colShader.setMat4("model", tetraModel);
+
+        tetraMesh.Draw();
+        
+        // draw water
+        waterShader.use();
+        glm::mat4 waterModel = glm::mat4(1.0f);
+        waterShader.setMat4("view", view);
+        waterShader.setMat4("projection", projection);
+        waterShader.setMat4("model", waterModel);
+        waterShader.setFloat("time", glfwGetTime());
+        glBindVertexArray(WaterVAO);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glBindVertexArray(0);
+
+        // draw particles
+        //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        particleShader.use();
+        for (const Particle &particle : windParticles)
+        {
+            if (particle.Life > 0.0f)
+            {
+                particleShader.setMat4("view", view);
+                particleShader.setMat4("projection", projection);
+                glm::mat4 particleModel = glm::mat4(1.0f);
+                particleModel = glm::translate(particleModel, particle.Position);
+                particleModel = glm::scale(particleModel, glm::vec3(0.1f)); // size of particle
+                particleShader.setMat4("model", particleModel);
+                particleShader.setVec4("color", particle.Color);
+                particleMesh.Draw();
+            }
+        }
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // check all events and swap the buffers
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    glfwTerminate();
+    return 0;
+}
+
+// ----------------------------------------------------------------
+
+// changes the viewport size depending on window size
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    glViewport(0, 0, width, height);
+}
+
+// ----------------------------------------------------------------
+
+// mouse callbacks - camera rotations
+void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    if (firstMouse)
+    {
+        lastX = (float)xpos;
+        lastY = (float)ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = (float)xpos - lastX;
+    float yoffset = (float)lastY - ypos;
+    lastX = (float)xpos;
+    lastY = (float)ypos;
+
+    float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 direction;
+    direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    direction.y = sin(glm::radians(pitch));
+    direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(direction);
+}
+
+// ----------------------------------------------------------------
+
+// input processing, camera movement
+void processInput(GLFWwindow* window)
+{
+    float cameraSpeed = 2.5f * deltaTime;
+
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+}
+
+// compute probability - used in spawning wind particles
+bool compute_probability(double probability) {
+    // Use the random number generator (random_device and mt19937)
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(0.0, 1.0);  // Generates a random float between 0.0 and 1.0
+
+    // Generate a random number and compare it to the given probability
+    double random_value = dis(gen);
+    return random_value <= probability;
+}
+
+// ----------------------------------------------------------------
+
+unsigned int FirstUnusedWindParticle()
+{
+    // search from last used particle, this will usually return almost instantly
+    for (unsigned int i = lastUsedWindParticle; i < windParticlesNumber; ++i) {
+        if (windParticles[i].Life <= 0.0f) {
+            lastUsedWindParticle = i;
+            return i;
+        }
+    }
+    // otherwise, do a linear search
+    for (unsigned int i = 0; i < lastUsedWindParticle; ++i) {
+        if (windParticles[i].Life <= 0.0f) {
+            lastUsedWindParticle = i;
+            return i;
+        }
+    }
+    // override first particle if all others are alive
+    lastUsedWindParticle = 0;
+    return 0;
+}
+
+// ----------------------------------------------------------------
+
+// The particles are supposed to be spawned in a cylindrical area around the camera
+// but only in the half facing blowing wind (the side from which the wind blows)
+// they are supposed to be also spawned in certain distance from the camera and 
+// not in a way that would make them go into the camera
+void RespawnParticle(Particle& particle)
+{
+    float maxDistanceAgainstWind = 3.0f;
+    float minDistanceFromCamera = 0.5f;
+    float minWidthOfTheWindTunnel = 1.0f;
+    float maxWidthOfTheWindTunnel = 3.5f;
+    float particleLife = 5.0f;
+
+    float rColor = 0.8f + ((rand() % 100) / 1000.0f);
+    float particleHeight = getRandomFloat(-0.2f, 0.6f);
+    float distanceAgainstWind = getRandomFloat(minDistanceFromCamera, maxDistanceAgainstWind); // maximum distance into the direction from which wind blows, also makes up the radius of circle around the camera 
+    float possibleDistanceToSide = (float)pow((pow(maxDistanceAgainstWind, 2) - pow(distanceAgainstWind, 2)), 0.5f); // the distance orthogonal to wind vector direction towards the boundry of the circle around camera (circle radius is maxDistanceAgainstWind)
+    float maxDistanceToSide = possibleDistanceToSide > maxWidthOfTheWindTunnel / 2 ? maxWidthOfTheWindTunnel / 2 : possibleDistanceToSide; // the distance orthogonal to wind vector direction towards the boundry of the circle around camera (circle radius is maxDistanceAgainstWind)
+    if (maxDistanceToSide < minWidthOfTheWindTunnel / 2) maxDistanceToSide = minWidthOfTheWindTunnel;
+    float distanceToSide = getRandomFloat(minWidthOfTheWindTunnel / 2, maxDistanceToSide);
+    glm::vec3 againstWind = -glm::normalize(windDirection) * distanceAgainstWind;
+    glm::vec3 sideVec = glm::normalize(glm::cross(windDirection, glm::vec3(0.0f, 1.0f, 0.0f))) * distanceToSide; // right-hand rule
+    glm::vec3 sideOffset = sideVec * distanceToSide;
+    glm::vec3 offset = againstWind + sideOffset;
+    offset.y = particleHeight;
+    particle.Position = offset; // should be: cameraPos + offset
+    particle.Color = glm::vec4(rColor, rColor, rColor, 1.0f);
+    particle.Life = particleLife;
+    particle.Velocity = windDirection * 0.5f;
+}
+
+// ----------------------------------------------------------------
+
+float getRandomFloat(float min, float max) {
+    // Generate a random float between min and max
+    return min + (max - min) * (rand() / (float)RAND_MAX);
+}
+
+// ----------------------------------------------------------------
+
+float rand_normal() {
+    return distribution(generator);
+}
