@@ -12,7 +12,8 @@
 
 #include "Shader.h"
 #include "Texture2D.h"
-#include "Mesh.h"
+#include "SingleMesh.h"
+#include "Model.h"
 
 
 // Particle
@@ -110,6 +111,21 @@ int main()
     Shader colShader(NULL, "resources/shaders/color/v_color.glsl", NULL, "resources/shaders/color/f_color.glsl");
     Shader particleShader(NULL, "resources/shaders/wind/v_wind_particle.glsl", NULL, "resources/shaders/wind/f_wind_particle.glsl");
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
+    Shader boatShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
+
+    //Assimp::Importer importer;
+    //const aiScene* scene = importer.ReadFile("resources/models/sailboat/3d-model.obj", 
+    //    aiProcess_Triangulate |
+    //    aiProcess_FlipUVs |
+    //    aiProcess_CalcTangentSpace);
+
+    //if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+    //    std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
+    //    return 1;
+    //}
+
+    Model sailboat("resources/models/sailboat/small_sailboat.glb");
+    
 
     // extures
     Texture2D cubeTex1("resources/textures/container.jpg", 0);
@@ -231,9 +247,9 @@ int main()
         }
     }
 
-    Mesh cubeMesh(cubeVertices, { 3, 2 });
-    Mesh tetraMesh(tetraVertices, tetraIndices, { 3, 3 });
-    Mesh particleMesh(particle_square, { 3 });
+    SingleMesh cubeMesh(cubeVertices, { 3, 2 });
+    SingleMesh tetraMesh(tetraVertices, tetraIndices, { 3, 3 });
+    SingleMesh particleMesh(particle_square, { 3 });
 
     // setting up water
     GLuint WaterVAO, WaterVBO, WaterEBO;
@@ -348,6 +364,8 @@ int main()
 
         tetraMesh.Draw();
         
+        sailboat.Draw(boatShader);
+
         // draw water
         waterShader.use();
         glm::mat4 waterModel = glm::mat4(1.0f);

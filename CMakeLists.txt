@@ -12,6 +12,17 @@ add_subdirectory("vendor/glfw")
 # GLM
 add_subdirectory("vendor/glm")
 
+# Assimp
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF)
+set(ASSIMP_BUILD_TESTS OFF)
+set(ASSIMP_BUILD_SAMPLES OFF)
+set(ASSIMP_NO_EXPORT ON)
+set(ASSIMP_BUILD_DRACO_DECODER OFF)
+set(ASSIMP_BUILD_ZLIB ON)
+set(BUILD_SHARED_LIBS OFF)
+
+add_subdirectory("vendor/assimp")
+
 # === Project Source Files ===
 file(GLOB_RECURSE SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp" "${CMAKE_SOURCE_DIR}/src/*.c")
 
@@ -25,6 +36,7 @@ target_include_directories(MickiewiczNaWodzie PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/vendor/glfw/include"
 	"${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm"
 	"${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb_image"
+	"${CMAKE_CURRENT_SOURCE_DIR}/vendor/assimp/include"
 	"${CMAKE_CURRENT_SOURCE_DIR}/vendor/"
 )
 
@@ -51,6 +63,7 @@ add_custom_command(
 target_link_libraries(MickiewiczNaWodzie PUBLIC
 	glfw
 	stb_image
+	assimp
 )
 
 find_package(OpenGL REQUIRED)
