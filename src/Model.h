@@ -24,7 +24,6 @@ unsigned int TextureFromFile(const char* path, const string& directory, bool gam
 class Model
 {
 public:
-    // model data 
     vector<Texture> textures_loaded;	// stores all the textures loaded so far, optimization to make sure textures aren't loaded more than once.
     vector<Mesh> meshes;
     string directory;
@@ -34,16 +33,21 @@ public:
     {
         loadModel(path);
     }
+
     void Draw(Shader& shader)
     {
         for (unsigned int i = 0; i < meshes.size(); i++)
             meshes[i].Draw(shader);
     }
+
 private:
     void loadModel(string path)
     {
         Assimp::Importer import;
-        const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+        const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | 
+                                                     aiProcess_FlipUVs |
+                                                     aiProcess_CalcTangentSpace |
+                                                     aiProcess_JoinIdenticalVertices);
 
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         {
@@ -78,14 +82,22 @@ private:
 
         for (unsigned int i = 0; i < mesh->mNumVertices; i++)
         {
+            //if (mesh->HasPositions()) std::cout << mesh->mName.C_Str() << " has positions\n";
+            //if (mesh->HasNormals()) std::cout << mesh->mName.C_Str() << " has normals\n";
+            //if (mesh->HasTextureCoords(0)) std::cout << mesh->mName.C_Str() << " has texcoords\n";
+            //if (mesh->HasTextureCoordsName(0)) std::cout << mesh->mName.C_Str() << " has texcoordsname\n";
+            //if (mesh->HasFaces()) std::cout << mesh->mName.C_Str() << " has faces\n";
+            //if (mesh->HasVertexColors(0)) std::cout << mesh->mName.C_Str() << " has vertex colors\n";
+            //if (mesh->HasTangentsAndBitangents()) std::cout << mesh->mName.C_Str() << " has tangents and bitangents\n";
+            //if (mesh->HasBones()) std::cout << mesh->mName.C_Str() << " has bones\n";
+
             Vertex vertex;
-            glm::vec3 vector; // we declare a placeholder vector since assimp uses its own vector class that doesn't directly convert to glm's vec3 class so we transfer the data to this placeholder glm::vec3 first.
-            // positions
+            glm::vec3 vector; 
             vector.x = mesh->mVertices[i].x;
             vector.y = mesh->mVertices[i].y;
             vector.z = mesh->mVertices[i].z;
             vertex.Position = vector;
-            // normals
+
             if (mesh->HasNormals())
             {
                 vector.x = mesh->mNormals[i].x;
@@ -93,8 +105,8 @@ private:
                 vector.z = mesh->mNormals[i].z;
                 vertex.Normal = vector;
             }
-            // texture coordinates
-            if (mesh->mTextureCoords[0]) // does the mesh contain texture coordinates?
+
+            if (mesh->mTextureCoords[0]) 
             {
                 glm::vec2 vec;
                 // a vertex can contain up to 8 different texture coordinates. We thus make the assumption that we won't 
@@ -102,23 +114,13 @@ private:
                 vec.x = mesh->mTextureCoords[0][i].x;
                 vec.y = mesh->mTextureCoords[0][i].y;
                 vertex.TexCoords = vec;
-                // tangent
-                //vector.x = mesh->mTangents[i].x;
-                //vector.y = mesh->mTangents[i].y;
-                //vector.z = mesh->mTangents[i].z;
-                //vertex.Tangent = vector;
-                // bitangent
-                //vector.x = mesh->mBitangents[i].x;
-                //vector.y = mesh->mBitangents[i].y;
-                //vector.z = mesh->mBitangents[i].z;
-                //vertex.Bitangent = vector;
             }
             else
                 vertex.TexCoords = glm::vec2(0.0f, 0.0f);
 
             vertices.push_back(vertex);
         }
-        // now wak through each of the mesh's faces (a face is a mesh its triangle) and retrieve the corresponding vertex indices.
+        // now walk through each of the mesh's faces (a face is a mesh its triangle) and retrieve the corresponding vertex indices.
         for (unsigned int i = 0; i < mesh->mNumFaces; i++)
         {
             aiFace face = mesh->mFaces[i];
@@ -127,29 +129,17 @@ private:
                 indices.push_back(face.mIndices[j]);
         }
 
-        // process materials
-        aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-        // we assume a convention for sampler names in the shaders. Each diffuse texture should be named
-        // as 'texture_diffuseN' where N is a sequential number ranging from 1 to MAX_SAMPLER_NUMBER. 
-        // Same applies to other texture as the following list summarizes:
-        // diffuse: texture_diffuseN
-        // specular: texture_specularN
-        // normal: texture_normalN
+        if (mesh->mMaterialIndex >= 0)
+        {
+            aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+            vector<Texture> diffuseMaps = loadMaterialTextures(material,
+                aiTextureType_DIFFUSE, "texture_diffuse");
+            textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
+            vector<Texture> specularMaps = loadMaterialTextures(material,
+                aiTextureType_SPECULAR, "texture_specular");
+            textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
+        }
 
-        // 1. diffuse maps
-        vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse");
-        textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
-        // 2. specular maps
-        vector<Texture> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "texture_specular");
-        textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
-        // 3. normal maps
-        std::vector<Texture> normalMaps = loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_normal");
-        textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
-        // 4. height maps
-        std::vector<Texture> heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, "texture_height");
-        textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
-
-        // return a mesh object created from the extracted mesh data
         return Mesh(vertices, indices, textures);
     }
 
@@ -160,25 +150,24 @@ private:
         {
             aiString str;
             mat->GetTexture(type, i, &str);
-            // check if texture was loaded before and if so, continue to next iteration: skip loading a new texture
             bool skip = false;
             for (unsigned int j = 0; j < textures_loaded.size(); j++)
             {
                 if (std::strcmp(textures_loaded[j].path.data(), str.C_Str()) == 0)
                 {
                     textures.push_back(textures_loaded[j]);
-                    skip = true; // a texture with the same filepath has already been loaded, continue to next one. (optimization)
+                    skip = true;
                     break;
                 }
             }
             if (!skip)
             {   // if texture hasn't been loaded already, load it
                 Texture texture;
-                texture.id = TextureFromFile(str.C_Str(), this->directory);
+                texture.id = TextureFromFile(str.C_Str(), directory);
                 texture.type = typeName;
                 texture.path = str.C_Str();
                 textures.push_back(texture);
-                textures_loaded.push_back(texture);  // store it as texture loaded for entire model, to ensure we won't unnecessary load duplicate textures.
+                textures_loaded.push_back(texture); // add to loaded textures
             }
         }
         return textures;

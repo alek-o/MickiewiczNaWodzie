@@ -9,3 +9,4 @@ void main()
 {
 	FragColor = texture(texture_diffuse1, TexCoord);
 }
+

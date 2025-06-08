@@ -113,21 +113,9 @@ int main()
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
     Shader boatShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
 
-    //Assimp::Importer importer;
-    //const aiScene* scene = importer.ReadFile("resources/models/sailboat/3d-model.obj", 
-    //    aiProcess_Triangulate |
-    //    aiProcess_FlipUVs |
-    //    aiProcess_CalcTangentSpace);
-
-    //if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-    //    std::cerr << "ERROR::ASSIMP::" << importer.GetErrorString() << std::endl;
-    //    return 1;
-    //}
-
-    Model sailboat("resources/models/sailboat/small_sailboat.glb");
+    Model sailboat("resources/models/sailboat/boat.obj");   
     
-
-    // extures
+    // textures
     Texture2D cubeTex1("resources/textures/container.jpg", 0);
     Texture2D cubeTex2("resources/textures/awesomeface.png", 1);
 
@@ -341,6 +329,14 @@ int main()
         view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 
+        boatShader.use();
+        boatShader.setMat4("view", view);
+        boatShader.setMat4("projection", projection);
+        glm::mat4 boatModel = glm::mat4(1.0f);
+        boatModel = glm::scale(boatModel, glm::vec3(0.5f));
+        boatShader.setMat4("model", boatModel);
+        sailboat.Draw(boatShader);
+
         // draw cube with texShader
         texShader.use();
         texShader.setMat4("view", view);
@@ -348,10 +344,7 @@ int main()
         glm::mat4 cubeModel = glm::mat4(1.0f);
         cubeModel = glm::translate(cubeModel, glm::vec3(-0.5f, 0.0f, 0.0f));
         texShader.setMat4("model", cubeModel);
-        
         cubeMesh.Draw();
-        //glBindVertexArray(CubeVAO);
-        //glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // draw tetrahedron with colShader
         colShader.use();
@@ -361,10 +354,9 @@ int main()
         tetraModel = glm::translate(tetraModel, glm::vec3(0.5f, 0.0f, 0.0f));
         tetraModel = glm::rotate(tetraModel, largeWindAngleRad, glm::vec3(0.0f, 1.0f, 0.0f));
         colShader.setMat4("model", tetraModel);
-
         tetraMesh.Draw();
         
-        sailboat.Draw(boatShader);
+        
 
         // draw water
         waterShader.use();
