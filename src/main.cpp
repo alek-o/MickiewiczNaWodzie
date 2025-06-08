@@ -107,94 +107,11 @@ int main()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
 
-    Shader texShader(NULL, "resources/shaders/texture/v_texture.glsl", NULL, "resources/shaders/texture/f_texture.glsl");
-    Shader colShader(NULL, "resources/shaders/color/v_color.glsl", NULL, "resources/shaders/color/f_color.glsl");
     Shader particleShader(NULL, "resources/shaders/wind/v_wind_particle.glsl", NULL, "resources/shaders/wind/f_wind_particle.glsl");
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
     Shader boatShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
 
     Model sailboat("resources/models/sailboat/boat.obj");   
-    
-    // textures
-    Texture2D cubeTex1("resources/textures/container.jpg", 0);
-    Texture2D cubeTex2("resources/textures/awesomeface.png", 1);
-
-    // cube vertices
-    float cubeVertices[] = {
-        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
-
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-
-        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-         0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-
-        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-         0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-        -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
-        -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
-    };
-
-    unsigned int cubeIndices[] = {
-    0, 1, 3, // first triangle
-    1, 2, 3  // second triangle
-    };
-
-
-    // Vertices of the tetrahedron
-    float tetraVertices[] = {
-        -0.5f, -0.5f, -0.5f, 0.7f, 0.0f, 0.0f,// Vertex 0
-        0.5f, -0.5f, -0.5f, 0.7f, 0.0f, 0.0f, // Vertex 1
-        0.0f, -0.5f, 0.5f, 0.0f, 0.0f, 0.7f, // Vertex 2
-        0.0f, 0.5f, 0.0f,  0.0f, 0.0f, 0.7f// Vertex 3
-    };
-
-    // Indices that define the faces of the tetrahedron
-    unsigned int tetraIndices[] = {
-        0, 1, 2,   // Face 1
-        0, 1, 3,   // Face 2
-        0, 2, 3,   // Face 3
-        1, 2, 3    // Face 4
-    };
-
-    float particle_quad[] = {
-    0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-    1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-
-    0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-    1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-    1.0f, 0.0f, 0.0f, 1.0f, 0.0f
-    };
 
     float particle_square[] = {
         0.0f, 1.0f, 0.0f,
@@ -235,8 +152,6 @@ int main()
         }
     }
 
-    SingleMesh cubeMesh(cubeVertices, { 3, 2 });
-    SingleMesh tetraMesh(tetraVertices, tetraIndices, { 3, 3 });
     SingleMesh particleMesh(particle_square, { 3 });
 
     // setting up water
@@ -260,10 +175,6 @@ int main()
 
     glBindVertexArray(0);
 
-    texShader.use();
-    texShader.setInt("texture1", cubeTex1.getSlot());
-    texShader.setInt("texture2", cubeTex2.getSlot());
-
     for (unsigned int i = 0; i < windParticlesNumber; ++i)
         windParticles.push_back(Particle());
 
@@ -283,10 +194,6 @@ int main()
         // render
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // bind textures on corresponding texture units
-        cubeTex1.bind();
-        cubeTex2.bind();
 
         // wind
         float windBearing = glm::degrees(acos(glm::dot(glm::normalize(windDirection), glm::normalize(north)))); // wind direction in degrees where 0 or 360 is north
@@ -335,28 +242,7 @@ int main()
         glm::mat4 boatModel = glm::mat4(1.0f);
         boatModel = glm::scale(boatModel, glm::vec3(0.5f));
         boatShader.setMat4("model", boatModel);
-        sailboat.Draw(boatShader);
-
-        // draw cube with texShader
-        texShader.use();
-        texShader.setMat4("view", view);
-        texShader.setMat4("projection", projection);
-        glm::mat4 cubeModel = glm::mat4(1.0f);
-        cubeModel = glm::translate(cubeModel, glm::vec3(-0.5f, 0.0f, 0.0f));
-        texShader.setMat4("model", cubeModel);
-        cubeMesh.Draw();
-
-        // draw tetrahedron with colShader
-        colShader.use();
-        colShader.setMat4("view", view);
-        colShader.setMat4("projection", projection);
-        glm::mat4 tetraModel = glm::mat4(1.0f);
-        tetraModel = glm::translate(tetraModel, glm::vec3(0.5f, 0.0f, 0.0f));
-        tetraModel = glm::rotate(tetraModel, largeWindAngleRad, glm::vec3(0.0f, 1.0f, 0.0f));
-        colShader.setMat4("model", tetraModel);
-        tetraMesh.Draw();
-        
-        
+        sailboat.Draw(boatShader);        
 
         // draw water
         waterShader.use();
@@ -372,7 +258,6 @@ int main()
         glBindVertexArray(0);
 
         // draw particles
-        //glBlendFunc(GL_SRC_ALPHA, GL_ONE);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         particleShader.use();
         for (const Particle &particle : windParticles)
