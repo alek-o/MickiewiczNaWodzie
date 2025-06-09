@@ -87,11 +87,19 @@ std::vector<glm::vec4> waterNormals(waterGridRes* waterGridRes);
 std::vector<unsigned int> waterIndices;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-float boatHeight()
+
+float boatRotate = 0.0f;
+float boatMove = 0.0f;
+const float ROTATION_SPEED = 0.08f;
+const float MOVE_SPEED = 0.025f;
+
+float boatHeight(glm::vec3 boatMatrix)
 {
     float freq = 0.5;
-    return sin(0.0 * freq + glfwGetTime()) * cos(0.0 * freq + glfwGetTime()) + 0.37;
+	// boatMatrix[3] - the translation vector of the boat in world space
+    return sin(boatMatrix.x * freq + glfwGetTime()) * cos(boatMatrix.z * freq + glfwGetTime()) + 0.37;
 }
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 int main()
@@ -215,6 +223,10 @@ int main()
     waterShader.setVec3("sun.diffuse", sunlight.diffuse);
     waterShader.setVec3("sun.specular", sunlight.specular);
 
+	glm::mat4 WorldMatrix = glm::mat4(1.0f);
+    glm::mat4 boatMatrix = WorldMatrix;
+    boatMatrix = glm::scale(boatMatrix, glm::vec3(0.5f));
+
     // render loop
     while (!glfwWindowShouldClose(window))
     {
@@ -272,15 +284,62 @@ int main()
         view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 
-        // draw boat
+        // The boat is tilting /////////////////////////////////////////////////////////////
+        // 1. Apply movement and rotation (steering)
+        boatMatrix = glm::translate(boatMatrix, glm::vec3(0, 0, boatMove)); // move boat forward
+        boatMatrix = glm::rotate(boatMatrix, glm::radians(boatRotate), glm::vec3(0.0f, 1.0f, 0.0f)); // rotate boat
+
+        // 2. Extract boat position and forward vector from updated matrix
+        glm::vec3 boatPosition = glm::vec3(boatMatrix[3]);
+        glm::vec3 forward = -glm::normalize(glm::vec3(boatMatrix[2]));
+
+        // 3. Get water normal at boat position
+        int xi = int((boatPosition.x + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
+        int zi = int((boatPosition.z + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
+        xi = glm::clamp(xi, 0, waterGridRes - 1);
+        zi = glm::clamp(zi, 0, waterGridRes - 1);
+        int index = zi * waterGridRes + xi;
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, waterNormSSBO);
+        glm::vec4* normals = (glm::vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+        glm::vec3 waterNormal = glm::normalize(glm::vec3(normals[index]));
+        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+        // 4. Construct tilt rotation matrix from forward + water normal
+        glm::vec3 right = glm::normalize(glm::cross(waterNormal, forward));
+        forward = glm::normalize(glm::cross(right, waterNormal)); // re-orthogonalize
+        glm::mat4 tiltRotation = glm::mat4(glm::mat3(right, waterNormal, -forward));
+
+        // 5. Compute wave height
+        float boatY = boatHeight(boatPosition); // optional: smooth over time
+
+        // 6. Final boat transform
+        glm::mat4 boatMatrixFloat = glm::translate(glm::mat4(1.0f), glm::vec3(boatPosition.x, boatY, boatPosition.z));
+        boatMatrixFloat *= tiltRotation;
+
+        // 7. Send matrices to shader and draw
         boatShader.use();
         boatShader.setMat4("view", view);
         boatShader.setMat4("projection", projection);
-        glm::mat4 boatModel = glm::mat4(1.0f);
-        boatModel = glm::scale(boatModel, glm::vec3(0.5f));
-        boatModel = glm::translate(boatModel, glm::vec3(0.0f, boatHeight(), 0.0f)); // adjust boat height
-        boatShader.setMat4("model", boatModel);
-        sailboat.Draw(boatShader);        
+        boatShader.setMat4("model", boatMatrixFloat);
+        sailboat.Draw(boatShader);
+
+
+  //      // The boat is not tilting /////////////////////////////////////////////////////////////
+  //      boatShader.use();
+  //      boatShader.setMat4("view", view);
+  //      boatShader.setMat4("projection", projection);
+  //     
+  //      // boat steering
+
+		//boatMatrix = glm::translate(boatMatrix, glm::vec3(0,0,boatMove)); // move boat forward
+  //      boatMatrix = glm::rotate(boatMatrix, glm::radians(boatRotate), glm::vec3(0.0f, 1.0f, 0.0f)); // rotate boat
+
+  //      glm::mat4 boatMatrixFloat = boatMatrix;
+  //      boatMatrixFloat = glm::translate(boatMatrix, glm::vec3(0.0f, boatHeight(boatMatrix), 0.0f)); // boat floats on waves
+
+  //      boatShader.setMat4("model", boatMatrixFloat);
+  //      sailboat.Draw(boatShader);
 
         // water calculations
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
@@ -397,14 +456,27 @@ void processInput(GLFWwindow* window)
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
         cameraPos += cameraSpeed * cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
         cameraPos -= cameraSpeed * cameraFront;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
         cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+    // Steering the boat
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        boatRotate = ROTATION_SPEED;
+	else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+		boatRotate = -ROTATION_SPEED;
+	else
+		boatRotate = 0.0f;
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        boatMove = MOVE_SPEED;
+    else
+        boatMove = 0.0f;
+
 }
 
 // compute probability - used in spawning wind particles
