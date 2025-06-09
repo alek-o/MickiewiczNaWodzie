@@ -73,10 +73,10 @@ unsigned int lastUsedWindParticle = 0;
 float windParticleSpawnProbability = 0.02f;
 
 // water
-const int gridRes = 256; // Grid resolution
-const int gridSize = 256; // Width/height of the grid
-std::vector<glm::vec3> vertices;
-std::vector<unsigned int> indices;
+const int waterGridRes = 32; // Grid resolution
+const int waterGridSize = 10; // Width/height of the grid
+std::vector<glm::vec4> waterVertices;
+std::vector<unsigned int> waterIndices;
 
 int main()
 {
@@ -110,9 +110,11 @@ int main()
     Shader particleShader(NULL, "resources/shaders/wind/v_wind_particle.glsl", NULL, "resources/shaders/wind/f_wind_particle.glsl");
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
     Shader boatShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
+    Shader waterHeightShader("resources/shaders/water/grid_height.cs.glsl", NULL, NULL, NULL);
 
-    Model sailboat("resources/models/sailboat/boat.obj");   
+    Model sailboat("resources/models/sailboat/boat.obj");
 
+    // particle mesh
     float particle_square[] = {
         0.0f, 1.0f, 0.0f,
         1.0f, 0.0f, 0.0f,
@@ -122,58 +124,58 @@ int main()
         1.0f, 1.0f, 0.0f,
         1.0f, 0.0f, 0.0f
     };
+    SingleMesh particleMesh(particle_square, { 3 });
 
     // Generate vertices
-    for (int z = 0; z < gridRes; ++z) {
-        for (int x = 0; x < gridRes; ++x) {
-            float xpos = (float)x / (gridRes - 1) * gridSize - gridSize / 2.0f;
-            float zpos = (float)z / (gridRes - 1) * gridSize - gridSize / 2.0f;
-            vertices.emplace_back(glm::vec3(xpos, 0.0f, zpos));
+    for (int z = 0; z < waterGridRes; ++z) {
+        for (int x = 0; x < waterGridRes; ++x) {
+            float xpos = (float)x / (waterGridRes - 1) * waterGridSize - waterGridSize / 2.0f;
+            float zpos = (float)z / (waterGridRes - 1) * waterGridSize - waterGridSize / 2.0f;
+            waterVertices.emplace_back(glm::vec4(xpos, 0.0f, zpos, 0.0f)); // extra W=0.0
         }
     }
 
-    // Generate indices for triangle rendering
-    for (int z = 0; z < gridRes - 1; ++z) {
-        for (int x = 0; x < gridRes - 1; ++x) {
-            int topLeft = z * gridRes + x;
+    for (int z = 0; z < waterGridRes - 1; ++z) {
+        for (int x = 0; x < waterGridRes - 1; ++x) {
+            int topLeft = z * waterGridRes + x;
             int topRight = topLeft + 1;
-            int bottomLeft = (z + 1) * gridRes + x;
+            int bottomLeft = (z + 1) * waterGridRes + x;
             int bottomRight = bottomLeft + 1;
 
             // First triangle
-            indices.push_back(topLeft);
-            indices.push_back(bottomLeft);
-            indices.push_back(topRight);
+            waterIndices.push_back(topLeft);
+            waterIndices.push_back(bottomLeft);
+            waterIndices.push_back(topRight);
 
             // Second triangle
-            indices.push_back(topRight);
-            indices.push_back(bottomLeft);
-            indices.push_back(bottomRight);
+            waterIndices.push_back(topRight);
+            waterIndices.push_back(bottomLeft);
+            waterIndices.push_back(bottomRight);
         }
     }
 
-    SingleMesh particleMesh(particle_square, { 3 });
+    // -- Create and upload vertex positions to an SSBO --
+    GLuint waterVertSSBO;
+    glGenBuffers(1, &waterVertSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, waterVertSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, waterVertices.size() * sizeof(glm::vec4), waterVertices.data(), GL_DYNAMIC_DRAW);
 
-    // setting up water
-    GLuint WaterVAO, WaterVBO, WaterEBO;
+    // -- Bind the SSBOs to specific binding points so shaders can access them --
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);  // binding = 0 in shader
+
+    // -- Set up the VAO (used for element drawing) --
+    GLuint WaterVAO, WaterEBO;
     glGenVertexArrays(1, &WaterVAO);
-    glGenBuffers(1, &WaterVBO);
     glGenBuffers(1, &WaterEBO);
 
-
-    // configuring water
     glBindVertexArray(WaterVAO);
 
-    glBindBuffer(GL_ARRAY_BUFFER, WaterVBO);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
-
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, WaterEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, waterIndices.size() * sizeof(unsigned int), waterIndices.data(), GL_STATIC_DRAW);
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
-
+    // -- No vertex attributes set up; vertex shader uses gl_VertexID to read from SSBO --
     glBindVertexArray(0);
+
 
     for (unsigned int i = 0; i < windParticlesNumber; ++i)
         windParticles.push_back(Particle());
@@ -244,6 +246,17 @@ int main()
         boatShader.setMat4("model", boatModel);
         sailboat.Draw(boatShader);        
 
+        // water calculations
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
+
+        waterHeightShader.use();
+        waterHeightShader.setFloat("time", glfwGetTime());
+        waterHeightShader.setUInt("gridRes", waterGridRes);
+        int groupCount = (waterGridRes + 15) / 16; // rounds up
+        glDispatchCompute(groupCount, groupCount, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT); // ensure height writes are done
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
+        
         // draw water
         waterShader.use();
         glm::mat4 waterModel = glm::mat4(1.0f);
@@ -253,7 +266,7 @@ int main()
         waterShader.setFloat("time", glfwGetTime());
         glBindVertexArray(WaterVAO);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, waterIndices.size(), GL_UNSIGNED_INT, 0);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glBindVertexArray(0);
 
