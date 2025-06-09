@@ -27,6 +27,13 @@ struct Particle {
     }
 };
 
+struct DirLight {
+    glm::vec3 direction;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+};
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
@@ -74,8 +81,9 @@ float windParticleSpawnProbability = 0.02f;
 
 // water
 const int waterGridRes = 32; // Grid resolution
-const int waterGridSize = 10; // Width/height of the grid
+const int waterGridSize = 40; // Width/height of the grid
 std::vector<glm::vec4> waterVertices;
+std::vector<glm::vec4> waterNormals(waterGridRes* waterGridRes);
 std::vector<unsigned int> waterIndices;
 
 int main()
@@ -111,6 +119,7 @@ int main()
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
     Shader boatShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
     Shader waterHeightShader("resources/shaders/water/grid_height.cs.glsl", NULL, NULL, NULL);
+    Shader waterNormalsShader("resources/shaders/water/grid_normals.cs.glsl", NULL, NULL, NULL);
 
     Model sailboat("resources/models/sailboat/boat.obj");
 
@@ -160,8 +169,15 @@ int main()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, waterVertSSBO);
     glBufferData(GL_SHADER_STORAGE_BUFFER, waterVertices.size() * sizeof(glm::vec4), waterVertices.data(), GL_DYNAMIC_DRAW);
 
+    // -- Create an SSBO for normals (optional / not used yet) --
+    GLuint waterNormSSBO;
+    glGenBuffers(1, &waterNormSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, waterNormSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, waterNormals.size() * sizeof(glm::vec4), nullptr, GL_DYNAMIC_DRAW);
+
     // -- Bind the SSBOs to specific binding points so shaders can access them --
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);  // binding = 0 in shader
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, waterNormSSBO); 
 
     // -- Set up the VAO (used for element drawing) --
     GLuint WaterVAO, WaterEBO;
@@ -180,6 +196,16 @@ int main()
     for (unsigned int i = 0; i < windParticlesNumber; ++i)
         windParticles.push_back(Particle());
 
+    DirLight sunlight;
+    sunlight.direction = glm::normalize(glm::vec3(-1.0f, -2.0f, -1.0f));
+    sunlight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
+    sunlight.diffuse = glm::vec3(0.7f, 0.7f, 0.7f);
+    sunlight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+    waterShader.use();
+    waterShader.setVec3("sun.direction", sunlight.direction);
+    waterShader.setVec3("sun.ambient", sunlight.ambient);
+    waterShader.setVec3("sun.diffuse", sunlight.diffuse);
+    waterShader.setVec3("sun.specular", sunlight.specular);
 
     // render loop
     while (!glfwWindowShouldClose(window))
@@ -255,6 +281,14 @@ int main()
         int groupCount = (waterGridRes + 15) / 16; // rounds up
         glDispatchCompute(groupCount, groupCount, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT); // ensure height writes are done
+
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, waterNormSSBO);
+
+        waterNormalsShader.use();
+        waterNormalsShader.setUInt("gridRes", waterGridRes);
+        glDispatchCompute(groupCount, groupCount, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT); // ensure normal writes are done
+
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
         
         // draw water
@@ -264,10 +298,11 @@ int main()
         waterShader.setMat4("projection", projection);
         waterShader.setMat4("model", waterModel);
         waterShader.setFloat("time", glfwGetTime());
+        waterShader.setVec3("viewPos", cameraPos);
         glBindVertexArray(WaterVAO);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDrawElements(GL_TRIANGLES, waterIndices.size(), GL_UNSIGNED_INT, 0);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         glBindVertexArray(0);
 
         // draw particles
