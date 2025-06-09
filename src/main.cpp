@@ -20,10 +20,11 @@
 struct Particle {
     glm::vec3 Position, Velocity;
     glm::vec4 Color;
-    float     Life;
+    float Life;
+    float Seed;
 
     Particle()
-        : Position(0.0f), Velocity(0.0f), Color(1.0f), Life(0.0f) {
+        : Position(0.0f), Velocity(0.0f), Color(1.0f), Life(0.0f), Seed(0.0f) {
     }
 };
 
@@ -67,17 +68,17 @@ float lastFrame = 0.0f; // Time of last frame
 
 // wind
 float largeScaleWindMaxAngle = 25.0f;
-float windSpeed = 1.5;
-float windWavePeriod = 50.0f; // seconds for one full wave
+float windSpeed = 3.0;
+float windWavePeriod = 5.0f; // sets how much the particle waves bend (the less, the more bending)
 float windWaveFrequency = 2.0f * std::_Pi_val / windWavePeriod;
-glm::vec3 windDirection = glm::normalize(glm::vec3(1.0f, 0.0f, 1.0f));
+float sideAmplitude = 0.4f; // how much the particle go to sides
+glm::vec3 windDirection = glm::normalize(glm::vec3(-1.0f, 0.0f, -1.0f));
 glm::vec3 north = glm::vec3(0, 0, 1);
-float windPower = 1.0f;
 
 std::vector<Particle> windParticles;
-unsigned int windParticlesNumber = 200;
+unsigned int windParticlesNumber = 20;
 unsigned int lastUsedWindParticle = 0;
-float windParticleSpawnProbability = 0.02f;
+float windParticleSpawnProbability = 0.03f;
 
 // water
 const int waterGridRes = 32; // Grid resolution
@@ -85,6 +86,9 @@ const int waterGridSize = 40; // Width/height of the grid
 std::vector<glm::vec4> waterVertices;
 std::vector<glm::vec4> waterNormals(waterGridRes* waterGridRes);
 std::vector<unsigned int> waterIndices;
+
+// sailboat
+glm::vec3 boatPos = glm::vec3(0.0f, 0.0f, 0.0f);
 
 int main()
 {
@@ -227,12 +231,12 @@ int main()
         float windBearing = glm::degrees(acos(glm::dot(glm::normalize(windDirection), glm::normalize(north)))); // wind direction in degrees where 0 or 360 is north
         float largeWindAngle = sin(glfwGetTime() * windWaveFrequency) * largeScaleWindMaxAngle;
         float largeWindAngleRad = glm::radians(largeWindAngle);
-        if (largeWindAngleRad < 0.0f) {
-            largeWindAngleRad *= 0.4f;
-        }
-        else {
-            largeWindAngleRad *= 0.6f;
-        }
+        //if (largeWindAngleRad < 0.0f) {
+        //    largeWindAngleRad *= 0.4f;
+        //}
+        //else {
+        //    largeWindAngleRad *= 0.6f;
+        //}
         glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), largeWindAngleRad, glm::vec3(0.0f, 1.0f, 0.0f));
         glm::vec3 largeWindDirection = glm::vec3(rotationMatrix * glm::vec4(windDirection, 0.0f));
         glm::vec3 temp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -244,17 +248,21 @@ int main()
             RespawnParticle(windParticles[unusedParticle]);
         }
         // update all particles
+
+        glm::vec3 sideAxis = glm::normalize(glm::cross(windDirection, glm::vec3(0.0f, 1.0f, 0.0f)));
         for (unsigned int i = 0; i < windParticlesNumber; ++i)
         {
             Particle& p = windParticles[i];
-            p.Life -= deltaTime; // reduce life
+            p.Life -= deltaTime;
             if (p.Life > 0.0f)
-            {	// particle is alive, thus update
-                float windFactor = (p.Position.x + p.Position.y + p.Position.z);
-                windFactor /= 4; // add the wind wavelenght;
-                windFactor += glfwGetTime();
-                glm::vec3 perParticleWindVector = glm::normalize(windDirection + (glm::normalize(glm::cross(windDirection, temp)) * (glm::length(windDirection) * sin(sin(windFactor * windWaveFrequency) * largeScaleWindMaxAngle))));
-                p.Position += (perParticleWindVector * windSpeed) * deltaTime;
+            {
+                float windFactor = glfwGetTime() + p.Seed; // p.Seed is unique per particle
+                float sideOffset = sin(windFactor * windWaveFrequency) * sideAmplitude; // amplitude in units of distance
+                glm::vec3 offset = sideAxis * sideOffset;
+
+                glm::vec3 velocity = glm::normalize(windDirection + offset) * windSpeed;
+                p.Position += velocity * deltaTime;
+
                 if (p.Life < 1.0f)
                     p.Color.a -= deltaTime * 2.5f;
             }
@@ -271,6 +279,10 @@ int main()
         boatModel = glm::scale(boatModel, glm::vec3(0.5f));
         boatShader.setMat4("model", boatModel);
         sailboat.Draw(boatShader);        
+
+        // boat position for wind particles spawnpoint calculation
+        glm::mat4 boatFront = glm::translate(boatModel, glm::vec3(0.0f, 0.0f, 5.0f));
+        boatPos = glm::vec3(boatFront[3]);
 
         // water calculations
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
@@ -316,7 +328,7 @@ int main()
                 particleShader.setMat4("projection", projection);
                 glm::mat4 particleModel = glm::mat4(1.0f);
                 particleModel = glm::translate(particleModel, particle.Position);
-                particleModel = glm::scale(particleModel, glm::vec3(0.1f)); // size of particle
+                particleModel = glm::scale(particleModel, glm::vec3(0.3f)); // size of particle
                 particleShader.setMat4("model", particleModel);
                 particleShader.setVec4("color", particle.Color);
                 particleMesh.Draw();
@@ -440,28 +452,26 @@ unsigned int FirstUnusedWindParticle()
 // not in a way that would make them go into the camera
 void RespawnParticle(Particle& particle)
 {
-    float maxDistanceAgainstWind = 3.0f;
-    float minDistanceFromCamera = 0.5f;
-    float minWidthOfTheWindTunnel = 1.0f;
-    float maxWidthOfTheWindTunnel = 3.5f;
-    float particleLife = 5.0f;
+    float maxDistanceAgainstWind = 16.0f;
+    float minDistanceFromCamera = 8.0f;
+    float tunnelWidth = 8.0f;
+    float particleLife = 7.0f;
 
     float rColor = 0.8f + ((rand() % 100) / 1000.0f);
-    float particleHeight = getRandomFloat(-0.2f, 0.6f);
+    float particleHeight = getRandomFloat(0.2f, 4.2f);
     float distanceAgainstWind = getRandomFloat(minDistanceFromCamera, maxDistanceAgainstWind); // maximum distance into the direction from which wind blows, also makes up the radius of circle around the camera 
-    float possibleDistanceToSide = (float)pow((pow(maxDistanceAgainstWind, 2) - pow(distanceAgainstWind, 2)), 0.5f); // the distance orthogonal to wind vector direction towards the boundry of the circle around camera (circle radius is maxDistanceAgainstWind)
-    float maxDistanceToSide = possibleDistanceToSide > maxWidthOfTheWindTunnel / 2 ? maxWidthOfTheWindTunnel / 2 : possibleDistanceToSide; // the distance orthogonal to wind vector direction towards the boundry of the circle around camera (circle radius is maxDistanceAgainstWind)
-    if (maxDistanceToSide < minWidthOfTheWindTunnel / 2) maxDistanceToSide = minWidthOfTheWindTunnel;
-    float distanceToSide = getRandomFloat(minWidthOfTheWindTunnel / 2, maxDistanceToSide);
+    float distanceToSide = getRandomFloat(-1.0f * (tunnelWidth / 2), tunnelWidth / 2);
+    
     glm::vec3 againstWind = -glm::normalize(windDirection) * distanceAgainstWind;
     glm::vec3 sideVec = glm::normalize(glm::cross(windDirection, glm::vec3(0.0f, 1.0f, 0.0f))) * distanceToSide; // right-hand rule
     glm::vec3 sideOffset = sideVec * distanceToSide;
     glm::vec3 offset = againstWind + sideOffset;
     offset.y = particleHeight;
-    particle.Position = offset; // should be: cameraPos + offset
+    particle.Position = boatPos + offset; // should be: cameraPos + offset
     particle.Color = glm::vec4(rColor, rColor, rColor, 1.0f);
     particle.Life = particleLife;
     particle.Velocity = windDirection * 0.5f;
+    particle.Seed = getRandomFloat(-1.0f * _Pi_val, 1.0f * _Pi_val);
 }
 
 // ----------------------------------------------------------------
