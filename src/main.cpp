@@ -48,8 +48,8 @@ const unsigned int SCR_WIDTH = 1600;
 const unsigned int SCR_HEIGHT = 1200;
 
 // camera
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraPos = glm::vec3(8.27f, 5.23f, 11.14f);
+glm::vec3 cameraFront = glm::vec3(-0.67f, -0.16f, -0.73f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 bool firstMouse = true;
@@ -88,6 +88,11 @@ std::vector<glm::vec4> waterNormals(waterGridRes* waterGridRes);
 std::vector<unsigned int> waterIndices;
 
 // sailboat
+float boatHeight()
+{
+    float freq = 0.5;
+    return sin(0.0 * freq + glfwGetTime()) * cos(0.0 * freq + glfwGetTime()) + 0.37;
+}
 glm::vec3 boatPos = glm::vec3(0.0f, 0.0f, 0.0f);
 
 int main()
@@ -272,11 +277,13 @@ int main()
         view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 
+        // draw boat
         boatShader.use();
         boatShader.setMat4("view", view);
         boatShader.setMat4("projection", projection);
         glm::mat4 boatModel = glm::mat4(1.0f);
         boatModel = glm::scale(boatModel, glm::vec3(0.5f));
+        boatModel = glm::translate(boatModel, glm::vec3(0.0f, boatHeight(), 0.0f)); // adjust boat height
         boatShader.setMat4("model", boatModel);
         sailboat.Draw(boatShader);        
 
