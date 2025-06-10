@@ -255,17 +255,37 @@ int main()
     glBindVertexArray(0);
 
     float sunVertices[] = {
-        // Współrzędne wierzchołków (x, y, z) oraz kolory (r, g, b)
-        -0.5f, -0.5f, 0.0f,  1.0f, 1.0f, 0.0f,
-         0.5f, -0.5f, 0.0f,  1.0f, 1.0f, 0.0f,
-         0.5f,  0.5f, 0.0f,  1.0f, 1.0f, 0.0f,
-        -0.5f,  0.5f, 0.0f,  1.0f, 1.0f, 0.0f
+        // positions        // texture coords
+        -0.5f, -0.5f, 0.0f,  0.0f, 0.0f,
+         0.5f, -0.5f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f, 0.0f,  1.0f, 1.0f,
+        -0.5f,  0.5f, 0.0f,  0.0f, 1.0f
     };
 
     unsigned int sunIndices[] = {
         0, 1, 2,
         0, 2, 3
     };
+
+    unsigned int sunTexture;
+    glGenTextures(1, &sunTexture);
+    glBindTexture(GL_TEXTURE_2D, sunTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    int width, height, nrChannels;
+    unsigned char* data = stbi_load("resources/shaders/sun/sun.png", &width, &height, &nrChannels, 0);
+    if (data) {
+        GLenum format = nrChannels == 4 ? GL_RGBA : GL_RGB;
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else {
+        std::cerr << "Failed to load sun texture!" << std::endl;
+    }
+    stbi_image_free(data);
 
     unsigned int squareVAO, squareVBO, squareEBO;
     glGenVertexArrays(1, &squareVAO);
@@ -280,12 +300,12 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, squareEBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(sunIndices), sunIndices, GL_STATIC_DRAW);
 
-    // Pozycje wierzchołków
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    // Position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // Kolory wierzchołków
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    // Texture Coordinates
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
@@ -393,37 +413,34 @@ int main()
 
         // sun
 
-        // Get current time
-        float timeSeconds = glfwGetTime(); // or your own time mechanism
+        // Compute sun position
+        float timeSeconds = glfwGetTime();
+        float angle = (timeSeconds / 20.0f) * 2.0f * glm::pi<float>();
+        float radius = 40.0f, height = 15.0f;
 
-        // Compute angle (full circle = 2π = 360° over 10 seconds)
-        float angle = (timeSeconds / 40.0f) * 2.0f * glm::pi<float>();
+        glm::vec3 sunPos(radius * cos(angle), height * sin(angle), radius * sin(angle));
+        glm::mat4 rot = glm::inverse(glm::lookAt(sunPos, glm::vec3(0), glm::vec3(0, 1, 0)));
+        glm::mat4 squareModel = glm::translate(glm::mat4(1.0f), sunPos) * rot;
+        squareModel = glm::scale(squareModel, glm::vec3(6.0f));
 
-        // Sun orbit radius and height
-        float radius = 80.0f;
-        float height = 45.0f;
+        /*glm::mat4 squareModel = glm::mat4(1.0f);
+        squareModel = glm::translate(squareModel, glm::vec3(0.0f, 10.0f, -10.0f));
+        squareModel = glm::scale(squareModel, glm::vec3(6.0f));*/
 
-        // Position on the circular orbit
-        float x = radius * cos(angle);
-        float z = radius * sin(angle);
-        float y = height * sin(angle); // Optional: sun rises and sets
-
-        // Setup transformation
-        glm::mat4 squareModel = glm::mat4(1.0f);
-        squareModel = glm::translate(squareModel, glm::vec3(x, y, z));
-        squareModel = glm::scale(squareModel, glm::vec3(6.0f)); // Size of sun
-
-        // Send matrices
         sunShader.use();
         sunShader.setMat4("view", view);
         sunShader.setMat4("projection", projection);
         sunShader.setMat4("model", squareModel);
 
+        // Bind texture
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sunTexture);
+        sunShader.setInt("sunTexture", 0); // ensure uniform exists
+
         // Draw sun
         glBindVertexArray(squareVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
-
 
         // wind
         float windBearing = glm::degrees(acos(glm::dot(glm::normalize(windDirection), glm::normalize(north)))); // wind direction in degrees where 0 or 360 is north
