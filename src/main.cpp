@@ -70,7 +70,7 @@ float lastFrame = 0.0f; // Time of last frame
 
 // wind
 float largeScaleWindMaxAngle = 25.0f;
-float windSpeed = 3.0;
+float windSpeed = 5.0;
 float windWavePeriod = 5.0f; // sets how much the particle waves bend (the less, the more bending)
 float windWaveFrequency = 2.0f * std::_Pi_val / windWavePeriod;
 float sideAmplitude = 0.4f; // how much the particle go to sides
@@ -78,9 +78,10 @@ glm::vec3 windDirection = glm::normalize(glm::vec3(-1.0f, 0.0f, -1.0f));
 glm::vec3 north = glm::vec3(0, 0, 1);
 
 std::vector<Particle> windParticles;
-unsigned int windParticlesNumber = 20;
+unsigned int windParticlesNumber = 100;
 unsigned int lastUsedWindParticle = 0;
-float windParticleSpawnProbability = 0.03f;
+float windParticleSpawnProbability = 0.002f;
+float windParticleLife = 6.0f;
 
 // water
 const int waterGridRes = 300; // Grid resolution
@@ -429,8 +430,6 @@ int main()
         view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 
-        // sun
-
         // compute sun position
         float timeSeconds = glfwGetTime();
         float angle = (timeSeconds / 40.0f) * 2.0f * glm::pi<float>();
@@ -508,6 +507,9 @@ int main()
 
                 if (p.Life < 1.0f)
                     p.Color.a -= deltaTime * 2.5f;
+                else if (p.Life > windParticleLife - 1)
+                    if (p.Color.a < 1.0f - deltaTime * 2.5f)
+                        p.Color.a += deltaTime * 2.5f;
             }
         }
         
@@ -592,51 +594,9 @@ int main()
         }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        // The boat is tilting /////////////////////////////////////////////////////////////
-        //// 1. Apply movement and rotation (steering)
-        //boatMatrix = glm::translate(boatMatrix, glm::vec3(0, 0, boatMove)); // move boat forward
-        //boatMatrix = glm::rotate(boatMatrix, glm::radians(boatRotate), glm::vec3(0.0f, 1.0f, 0.0f)); // rotate boat
-
-        //// 2. Extract boat position and forward vector from updated matrix
-        //glm::vec3 boatPosition = glm::vec3(boatMatrix[3]);
-        //glm::vec3 forward = -glm::normalize(glm::vec3(boatMatrix[2]));
-
-        //// 3. Get water normal at boat position
-        //int xi = int((boatPosition.x + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
-        //int zi = int((boatPosition.z + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
-        //xi = glm::clamp(xi, 0, waterGridRes - 1);
-        //zi = glm::clamp(zi, 0, waterGridRes - 1);
-        //int index = zi * waterGridRes + xi;
-
-        //glBindBuffer(GL_SHADER_STORAGE_BUFFER, waterNormSSBO);
-        //glm::vec4* normals = (glm::vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-        //glm::vec3 waterNormal = glm::normalize(glm::vec3(normals[index]));
-        //glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-
-        //// 4. Construct tilt rotation matrix from forward + water normal
-        //glm::vec3 right = glm::normalize(glm::cross(waterNormal, forward));
-        //forward = glm::normalize(glm::cross(right, waterNormal)); // re-orthogonalize
-        //glm::mat4 tiltRotation = glm::mat4(glm::mat3(right, waterNormal, -forward));
-
-        //// 5. Compute wave height
-        //float boatY = boatHeight(boatPosition); // optional: smooth over time
-
-        //// 6. Final boat transform
-        //glm::mat4 boatMatrixFloat = glm::translate(glm::mat4(1.0f), glm::vec3(boatPosition.x, boatY, boatPosition.z));
-        //boatMatrixFloat *= tiltRotation;
-
-        //// 7. Send matrices to shader and draw
-        //boatShader.use();
-        //boatShader.setMat4("view", view);
-        //boatShader.setMat4("projection", projection);
-        //boatShader.setMat4("model", boatMatrixFloat);
-        //sailboat.Draw(boatShader);
-
         // boat position for wind particles spawnpoint calculation
         glm::mat4 boatFront = glm::translate(boatMatrix, glm::vec3(0.0f, 0.0f, 5.0f));
         boatPos = glm::vec3(boatFront[3]);
-
-        // The boat is not tilting /////////////////////////////////////////////////////////////
         
         // boat steering
         glm::vec3 forward = glm::normalize(glm::vec3(boatMatrix[2]));
@@ -820,7 +780,8 @@ void RespawnParticle(Particle& particle)
     glm::vec3 offset = againstWind + sideOffset;
     offset.y = particleHeight;
     particle.Position = boatPos + offset; // should be: cameraPos + offset
-    particle.Color = glm::vec4(rColor, rColor, rColor, 1.0f);
+    //particle.Color = glm::vec4(rColor, rColor, rColor, 1.0f);
+    particle.Color = glm::vec4(rColor, rColor, rColor, 0.0f);
     particle.Life = particleLife;
     particle.Velocity = windDirection * 0.5f;
     particle.Seed = getRandomFloat(-1.0f * _Pi_val, 1.0f * _Pi_val);
