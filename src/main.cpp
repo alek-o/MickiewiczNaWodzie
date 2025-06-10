@@ -400,8 +400,8 @@ int main()
         float angle = (timeSeconds / 40.0f) * 2.0f * glm::pi<float>();
 
         // Sun orbit radius and height
-        float radius = 100.0f;
-        float height = 60.0f;
+        float radius = 80.0f;
+        float height = 45.0f;
 
         // Position on the circular orbit
         float x = radius * cos(angle);
@@ -460,10 +460,6 @@ int main()
                     p.Color.a -= deltaTime * 2.5f;
             }
         }
-
-        glm::mat4 view, projection;
-        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-        projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         
         // draw skybox
         glDepthFunc(GL_LEQUAL);
