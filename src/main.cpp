@@ -481,7 +481,7 @@ int main()
         // compute sun position
         float timeSeconds = glfwGetTime();
         float angle = (timeSeconds / 20.0f) * 2.0f * glm::pi<float>();
-        float radius = 45.0f, height = 15.0f;
+        float radius = 90.0f, height = 30.0f;
 
         glm::vec3 sunPos(radius * cos(angle), height * sin(angle), radius * sin(angle));
 
