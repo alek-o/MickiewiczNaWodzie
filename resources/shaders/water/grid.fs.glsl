@@ -29,11 +29,12 @@ void main() {
     // Specular
     vec3 viewDir = normalize(viewPos - fragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
+    float aboveHorizon = dot(-sun.direction, vec3(0.0, 1.0, 0.0)) > -0.5 ? 1.0 : 0.0;
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
-    vec3 specular = sun.specular * spec;
+    vec3 specular = sun.specular * spec * aboveHorizon * 0.5;
 
     // Final color
-    vec3 baseColor = vec3(0.2, 0.5, 0.8); // Water blue
+    vec3 baseColor = vec3(0.35, 0.65, 0.9); // Water blue
     vec3 result = (ambient + diffuse) * baseColor + specular;
     FragColor = vec4(result, 1.0);
 }

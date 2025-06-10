@@ -48,6 +48,8 @@ const unsigned int SCR_WIDTH = 1600;
 const unsigned int SCR_HEIGHT = 1200;
 
 // camera
+//glm::vec3 cameraPos = glm::vec3(22.0f, 12.0f, 18.0f);
+//glm::vec3 cameraFront = glm::vec3(-0.8f, -0.2f, -0.6f);
 glm::vec3 cameraPos = glm::vec3(8.27f, 5.23f, 11.14f);
 glm::vec3 cameraFront = glm::vec3(-0.67f, -0.16f, -0.73f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -81,8 +83,8 @@ unsigned int lastUsedWindParticle = 0;
 float windParticleSpawnProbability = 0.03f;
 
 // water
-const int waterGridRes = 256; // Grid resolution
-const int waterGridSize = 200; // Width/height of the grid
+const int waterGridRes = 300; // Grid resolution
+const int waterGridSize = 1000; // Width/height of the grid
 std::vector<glm::vec4> waterVertices;
 std::vector<glm::vec4> waterNormals(waterGridRes* waterGridRes);
 std::vector<unsigned int> waterIndices;
@@ -90,15 +92,15 @@ std::vector<unsigned int> waterIndices;
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 float boatRotate = 0.0f;
-float boatMove = 0.0f;
+bool boatMove = false;
 const float ROTATION_SPEED = 0.08f;
 const float MOVE_SPEED = 0.025f;
 
-float boatHeight(glm::vec3 boatMatrix)
+float boatHeight(glm::mat4 boatMatrix)
 {
     float freq = 0.5;
 	// boatMatrix[3] - the translation vector of the boat in world space
-    return sin(boatMatrix.x * freq + glfwGetTime()) * cos(boatMatrix.z * freq + glfwGetTime()) + 0.37;
+    return sin(boatMatrix[3].x * freq + glfwGetTime()) * cos(boatMatrix[3].z * freq + glfwGetTime()) + 0.37;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -276,7 +278,7 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     int width, height, nrChannels;
-    unsigned char* data = stbi_load("resources/shaders/sun/sun.png", &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load("resources/textures/sun/sun.png", &width, &height, &nrChannels, 0);
     if (data) {
         GLenum format = nrChannels == 4 ? GL_RGBA : GL_RGB;
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
@@ -327,12 +329,12 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     std::string facesCubemap[6] = {
-        "resources/textures/sky_05_2k/cubemap/px.png", // right
-        "resources/textures/sky_05_2k/cubemap/nx.png", // left
-        "resources/textures/sky_05_2k/cubemap/py.png", // up
-        "resources/textures/sky_05_2k/cubemap/ny.png", // down
-        "resources/textures/sky_05_2k/cubemap/pz.png", // front
-        "resources/textures/sky_05_2k/cubemap/nz.png" // back
+        "resources/textures/sky_05_2k/cubemap/px2.png", // right
+        "resources/textures/sky_05_2k/cubemap/nx2.png", // left
+        "resources/textures/sky_05_2k/cubemap/py2.png", // up
+        "resources/textures/sky_05_2k/cubemap/ny2.png", // down
+        "resources/textures/sky_05_2k/cubemap/pz2.png", // front
+        "resources/textures/sky_05_2k/cubemap/nz2.png" // back
     };
 
     unsigned int cubemapTexture;
@@ -344,7 +346,7 @@ int main()
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-    for (unsigned int i = 0; i < 6; i++) {
+    /*for (unsigned int i = 0; i < 6; i++) {
         int width, height, nrChannels;
         unsigned char* data = stbi_load(facesCubemap[i].c_str(), &width, &height, &nrChannels, 0);
         if (data) {
@@ -367,7 +369,39 @@ int main()
             std::cout << "Failed to load texture: " << facesCubemap[i] << std::endl;
             stbi_image_free(data);
         }
+    }*/
+
+    for (unsigned int i = 0; i < 6; i++) {
+        int width, height, nrChannels;
+        stbi_set_flip_vertically_on_load(false);
+        unsigned char* data = stbi_load(facesCubemap[i].c_str(), &width, &height, &nrChannels, 0);
+
+        if (!data) {
+            std::cerr << "Failed to load cubemap texture: " << facesCubemap[i] << std::endl;
+            continue; // or handle this more strictly
+        }
+
+        GLenum format;
+        if (nrChannels == 1)
+            format = GL_RED;
+        else if (nrChannels == 3)
+            format = GL_RGB;
+        else if (nrChannels == 4)
+            format = GL_RGBA;
+        else {
+            std::cerr << "Unknown number of channels: " << nrChannels << " in " << facesCubemap[i] << std::endl;
+            stbi_image_free(data);
+            continue;
+        }
+
+        glTexImage2D(
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+            0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data
+        );
+
+        stbi_image_free(data);
     }
+
 
     skyboxShader.use();
     skyboxShader.setInt("skybox", 0);
@@ -415,17 +449,31 @@ int main()
 
         // Compute sun position
         float timeSeconds = glfwGetTime();
-        float angle = (timeSeconds / 20.0f) * 2.0f * glm::pi<float>();
+        float angle = (timeSeconds / 30.0f) * 2.0f * glm::pi<float>();
         float radius = 40.0f, height = 15.0f;
 
         glm::vec3 sunPos(radius * cos(angle), height * sin(angle), radius * sin(angle));
+
+        // colors of the light
+        float sunAltitude = glm::normalize(sunPos).y; // y component of sun direction
+
+        sunAltitude = glm::clamp(sunAltitude, -1.0f, 1.0f);
+
+        glm::vec3 sunsetColorLow = glm::vec3(1.0f, 0.4f, 0.1f); // red/orange
+        glm::vec3 sunsetColorHigh = glm::vec3(1.0f, 1.0f, 0.9f); // yellow-white
+
+        float t = glm::smoothstep(-0.05f, 0.6f, sunAltitude); // fade from red to yellow as sun rises
+        glm::vec3 sunColor = glm::mix(sunsetColorLow, sunsetColorHigh, t);
+
+        // Update sun light color
+        sunlight.diffuse = sunColor * 0.8f;
+        sunlight.specular = sunColor * 1.0f;
+        sunlight.ambient = sunColor * 0.2f; // warm ambient glow
+        sunlight.direction = glm::normalize(-sunPos); // FROM sun to scene
+
         glm::mat4 rot = glm::inverse(glm::lookAt(sunPos, glm::vec3(0), glm::vec3(0, 1, 0)));
         glm::mat4 squareModel = glm::translate(glm::mat4(1.0f), sunPos) * rot;
         squareModel = glm::scale(squareModel, glm::vec3(6.0f));
-
-        /*glm::mat4 squareModel = glm::mat4(1.0f);
-        squareModel = glm::translate(squareModel, glm::vec3(0.0f, 10.0f, -10.0f));
-        squareModel = glm::scale(squareModel, glm::vec3(6.0f));*/
 
         sunShader.use();
         sunShader.setMat4("view", view);
@@ -478,9 +526,14 @@ int main()
             }
         }
         
+        glm::vec3 nightTint = glm::vec3(0.1f, 0.1f, 0.2f);
+
         // draw skybox
         glDepthFunc(GL_LEQUAL);
         skyboxShader.use();
+        skyboxShader.setVec3("sunColor", sunColor);
+        skyboxShader.setFloat("sunAltitude", sunAltitude);
+        skyboxShader.setVec3("nightTint", nightTint);
         skyboxShader.setMat4("view", glm::mat4(glm::mat3(view)));
         skyboxShader.setMat4("projection", projection);
         glBindVertexArray(skyboxVAO);
@@ -491,66 +544,16 @@ int main()
 
         glDepthFunc(GL_LESS);
 
-        // The boat is tilting /////////////////////////////////////////////////////////////
-        // 1. Apply movement and rotation (steering)
-        boatMatrix = glm::translate(boatMatrix, glm::vec3(0, 0, boatMove)); // move boat forward
-        boatMatrix = glm::rotate(boatMatrix, glm::radians(boatRotate), glm::vec3(0.0f, 1.0f, 0.0f)); // rotate boat
+        waterShader.setMat4("view", view);
+        waterShader.setMat4("projection", projection);
 
-        // 2. Extract boat position and forward vector from updated matrix
-        glm::vec3 boatPosition = glm::vec3(boatMatrix[3]);
-        glm::vec3 forward = -glm::normalize(glm::vec3(boatMatrix[2]));
-
-        // 3. Get water normal at boat position
-        int xi = int((boatPosition.x + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
-        int zi = int((boatPosition.z + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
-        xi = glm::clamp(xi, 0, waterGridRes - 1);
-        zi = glm::clamp(zi, 0, waterGridRes - 1);
-        int index = zi * waterGridRes + xi;
-
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, waterNormSSBO);
-        glm::vec4* normals = (glm::vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-        glm::vec3 waterNormal = glm::normalize(glm::vec3(normals[index]));
-        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-
-        // 4. Construct tilt rotation matrix from forward + water normal
-        glm::vec3 right = glm::normalize(glm::cross(waterNormal, forward));
-        forward = glm::normalize(glm::cross(right, waterNormal)); // re-orthogonalize
-        glm::mat4 tiltRotation = glm::mat4(glm::mat3(right, waterNormal, -forward));
-
-        // 5. Compute wave height
-        float boatY = boatHeight(boatPosition); // optional: smooth over time
-
-        // 6. Final boat transform
-        glm::mat4 boatMatrixFloat = glm::translate(glm::mat4(1.0f), glm::vec3(boatPosition.x, boatY, boatPosition.z));
-        boatMatrixFloat *= tiltRotation;
-
-        // 7. Send matrices to shader and draw
-        boatShader.use();
-        boatShader.setMat4("view", view);
-        boatShader.setMat4("projection", projection);
-        boatShader.setMat4("model", boatMatrixFloat);
-        sailboat.Draw(boatShader);
-
-        // boat position for wind particles spawnpoint calculation
-        glm::mat4 boatFront = glm::translate(boatMatrix, glm::vec3(0.0f, 0.0f, 5.0f));
-        boatPos = glm::vec3(boatFront[3]);
-
-
-  //      // The boat is not tilting /////////////////////////////////////////////////////////////
-  //      boatShader.use();
-  //      boatShader.setMat4("view", view);
-  //      boatShader.setMat4("projection", projection);
-  //     
-  //      // boat steering
-
-		//boatMatrix = glm::translate(boatMatrix, glm::vec3(0,0,boatMove)); // move boat forward
-  //      boatMatrix = glm::rotate(boatMatrix, glm::radians(boatRotate), glm::vec3(0.0f, 1.0f, 0.0f)); // rotate boat
-
-  //      glm::mat4 boatMatrixFloat = boatMatrix;
-  //      boatMatrixFloat = glm::translate(boatMatrix, glm::vec3(0.0f, boatHeight(boatMatrix), 0.0f)); // boat floats on waves
-
-  //      boatShader.setMat4("model", boatMatrixFloat);
-  //      sailboat.Draw(boatShader);
+        sunlight.direction = glm::normalize(-sunPos); // direction FROM sun
+        waterShader.use();
+        waterShader.setVec3("sun.direction", sunlight.direction);
+        waterShader.setVec3("sun.ambient", sunlight.ambient);
+        waterShader.setVec3("sun.diffuse", sunlight.diffuse);
+        waterShader.setVec3("sun.specular", sunlight.specular);
+        waterShader.setVec3("viewPos", cameraPos); // for specular highlights
 
         // water calculations
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
@@ -603,6 +606,75 @@ int main()
             }
         }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // The boat is tilting /////////////////////////////////////////////////////////////
+        //// 1. Apply movement and rotation (steering)
+        //boatMatrix = glm::translate(boatMatrix, glm::vec3(0, 0, boatMove)); // move boat forward
+        //boatMatrix = glm::rotate(boatMatrix, glm::radians(boatRotate), glm::vec3(0.0f, 1.0f, 0.0f)); // rotate boat
+
+        //// 2. Extract boat position and forward vector from updated matrix
+        //glm::vec3 boatPosition = glm::vec3(boatMatrix[3]);
+        //glm::vec3 forward = -glm::normalize(glm::vec3(boatMatrix[2]));
+
+        //// 3. Get water normal at boat position
+        //int xi = int((boatPosition.x + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
+        //int zi = int((boatPosition.z + waterGridSize / 2.0f) / waterGridSize * (waterGridRes - 1));
+        //xi = glm::clamp(xi, 0, waterGridRes - 1);
+        //zi = glm::clamp(zi, 0, waterGridRes - 1);
+        //int index = zi * waterGridRes + xi;
+
+        //glBindBuffer(GL_SHADER_STORAGE_BUFFER, waterNormSSBO);
+        //glm::vec4* normals = (glm::vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+        //glm::vec3 waterNormal = glm::normalize(glm::vec3(normals[index]));
+        //glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+
+        //// 4. Construct tilt rotation matrix from forward + water normal
+        //glm::vec3 right = glm::normalize(glm::cross(waterNormal, forward));
+        //forward = glm::normalize(glm::cross(right, waterNormal)); // re-orthogonalize
+        //glm::mat4 tiltRotation = glm::mat4(glm::mat3(right, waterNormal, -forward));
+
+        //// 5. Compute wave height
+        //float boatY = boatHeight(boatPosition); // optional: smooth over time
+
+        //// 6. Final boat transform
+        //glm::mat4 boatMatrixFloat = glm::translate(glm::mat4(1.0f), glm::vec3(boatPosition.x, boatY, boatPosition.z));
+        //boatMatrixFloat *= tiltRotation;
+
+        //// 7. Send matrices to shader and draw
+        //boatShader.use();
+        //boatShader.setMat4("view", view);
+        //boatShader.setMat4("projection", projection);
+        //boatShader.setMat4("model", boatMatrixFloat);
+        //sailboat.Draw(boatShader);
+
+        // boat position for wind particles spawnpoint calculation
+        glm::mat4 boatFront = glm::translate(boatMatrix, glm::vec3(0.0f, 0.0f, 5.0f));
+        boatPos = glm::vec3(boatFront[3]);
+
+        // The boat is not tilting /////////////////////////////////////////////////////////////
+        
+        // boat steering
+        glm::vec3 forward = glm::normalize(glm::vec3(boatMatrix[2]));
+        float windAlignment = glm::dot(forward, windDirection);
+
+        if (boatMove)
+            boatMatrix = glm::translate(boatMatrix, glm::vec3(0,0,MOVE_SPEED+windAlignment*0.008f)); // move boat forward
+
+        boatMatrix = glm::rotate(boatMatrix, glm::radians(boatRotate), glm::vec3(0.0f, 1.0f, 0.0f)); // rotate boat
+
+        glm::mat4 boatMatrixFloat = boatMatrix;
+        boatMatrixFloat = glm::translate(boatMatrix, glm::vec3(0.0f, boatHeight(boatMatrix), 0.0f)); // boat floats on waves
+
+        boatShader.use();
+        boatShader.setVec3("sun.direction", sunlight.direction);
+        boatShader.setVec3("sun.ambient", sunlight.ambient);
+        boatShader.setVec3("sun.diffuse", sunlight.diffuse);
+        boatShader.setVec3("sun.specular", sunlight.specular);
+        boatShader.setVec3("viewPos", cameraPos);
+        boatShader.setMat4("view", view);
+        boatShader.setMat4("projection", projection);
+        boatShader.setMat4("model", boatMatrixFloat);
+        sailboat.Draw(boatShader);
 
         // check all events and swap the buffers
         glfwSwapBuffers(window);
@@ -662,7 +734,7 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 // input processing, camera movement
 void processInput(GLFWwindow* window)
 {
-    float cameraSpeed = 2.5f * deltaTime;
+    float cameraSpeed = 5.0f * deltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
@@ -684,10 +756,9 @@ void processInput(GLFWwindow* window)
 	else
 		boatRotate = 0.0f;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        boatMove = MOVE_SPEED;
+        boatMove = true;
     else
-        boatMove = 0.0f;
-
+        boatMove = false;
 }
 
 // compute probability - used in spawning wind particles
