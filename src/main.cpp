@@ -145,11 +145,13 @@ int main()
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
     Shader boatShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
     Shader sunShader(NULL, "resources/shaders/sun/v_sun.glsl", NULL, "resources/shaders/sun/f_sun.glsl");
+	Shader islandShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
     Shader waterHeightShader("resources/shaders/water/grid_height.cs.glsl", NULL, NULL, NULL);
     Shader waterNormalsShader("resources/shaders/water/grid_normals.cs.glsl", NULL, NULL, NULL);
     Shader skyboxShader(NULL, "resources/shaders/skybox/skybox.vs.glsl", NULL, "resources/shaders/skybox/skybox.fs.glsl");
 
     Model sailboat("resources/models/sailboat/boat.obj");
+	Model island("resources/models/island/island.obj");
 
     // particle mesh
     float particle_square[] = {
@@ -421,8 +423,20 @@ int main()
     waterShader.setVec3("sun.diffuse", sunlight.diffuse);
     waterShader.setVec3("sun.specular", sunlight.specular);
 
-	glm::mat4 WorldMatrix = glm::mat4(1.0f);
-    glm::mat4 boatMatrix = WorldMatrix;
+	glm::mat4 worldMatrix = glm::mat4(1.0f);
+    glm::mat4 islandMatrix = worldMatrix;
+    islandMatrix = glm::translate(worldMatrix, glm::vec3(40.0f, -1.0f, 100.0f));
+	islandMatrix = glm::scale(islandMatrix, glm::vec3(10.0f));
+
+    glm::mat4 islandMatrix2 = worldMatrix;
+    islandMatrix2 = glm::translate(worldMatrix, glm::vec3(-75.0f, -1.0f, -30.0f));
+    islandMatrix2 = glm::scale(islandMatrix2, glm::vec3(10.0f));
+
+    glm::mat4 islandMatrix3 = worldMatrix;
+    islandMatrix3 = glm::translate(worldMatrix, glm::vec3(45.0f, -1.0f, -75.0f));
+    islandMatrix3 = glm::scale(islandMatrix3, glm::vec3(10.0f));
+
+    glm::mat4 boatMatrix = worldMatrix;
     boatMatrix = glm::scale(boatMatrix, glm::vec3(0.5f));
 
     // render loop
@@ -449,7 +463,7 @@ int main()
 
         // Compute sun position
         float timeSeconds = glfwGetTime();
-        float angle = (timeSeconds / 30.0f) * 2.0f * glm::pi<float>();
+        float angle = (timeSeconds / 40.0f) * 2.0f * glm::pi<float>();
         float radius = 40.0f, height = 15.0f;
 
         glm::vec3 sunPos(radius * cos(angle), height * sin(angle), radius * sin(angle));
@@ -675,6 +689,21 @@ int main()
         boatShader.setMat4("projection", projection);
         boatShader.setMat4("model", boatMatrixFloat);
         sailboat.Draw(boatShader);
+
+        islandShader.use();
+        islandShader.setVec3("sun.direction", sunlight.direction);
+        islandShader.setVec3("sun.ambient", sunlight.ambient);
+        islandShader.setVec3("sun.diffuse", sunlight.diffuse);
+        islandShader.setVec3("sun.specular", sunlight.specular);
+        islandShader.setVec3("viewPos", cameraPos);
+        islandShader.setMat4("view", view);
+        islandShader.setMat4("projection", projection);
+        islandShader.setMat4("model", islandMatrix);
+        island.Draw(islandShader);
+		islandShader.setMat4("model", islandMatrix2);
+		island.Draw(islandShader);
+		islandShader.setMat4("model", islandMatrix3);
+		island.Draw(islandShader);
 
         // check all events and swap the buffers
         glfwSwapBuffers(window);

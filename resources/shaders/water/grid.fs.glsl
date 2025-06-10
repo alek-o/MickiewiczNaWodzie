@@ -19,17 +19,19 @@ void main() {
     vec3 norm = normalize(vNormal);
     vec3 lightDir = normalize(-sun.direction);
 
+    float aboveHorizon = smoothstep(-0.1, 0.05, dot(-sun.direction, vec3(0.0, 1.0, 0.0)));
+
     // Ambient
-    vec3 ambient = sun.ambient;
+    vec3 ambient = sun.ambient * aboveHorizon;
 
     // Diffuse
     float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = sun.diffuse * diff;
+    vec3 diffuse = sun.diffuse * diff * aboveHorizon;
 
     // Specular
     vec3 viewDir = normalize(viewPos - fragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
-    float aboveHorizon = dot(-sun.direction, vec3(0.0, 1.0, 0.0)) > -0.5 ? 1.0 : 0.0;
+    
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
     vec3 specular = sun.specular * spec * aboveHorizon * 0.5;
 

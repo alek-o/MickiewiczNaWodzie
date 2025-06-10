@@ -34,7 +34,7 @@ void main()
     vec3 norm = normalize(Normal);
     vec3 lightDir = normalize(-sun.direction);
 
-    float aboveHorizon = dot(-sun.direction, vec3(0.0, 1.0, 0.0)) > -0.05 ? 1.0 : 0.0;
+    float aboveHorizon = smoothstep(-0.1, 0.05, dot(-sun.direction, vec3(0.0, 1.0, 0.0)));
 
     // Ambient
     vec3 ambient = sun.ambient * texture(texture_diffuse1, TexCoord).rgb * aboveHorizon;
