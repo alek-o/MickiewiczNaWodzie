@@ -132,6 +132,12 @@ int main()
     glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
+    // Enables Cull Facing
+    //glEnable(GL_CULL_FACE);
+    // Keeps front faces
+    //glCullFace(GL_FRONT);
+    // Uses counter clock-wise standard
+    //glFrontFace(GL_CCW);
 
     Shader particleShader(NULL, "resources/shaders/wind/v_wind_particle.glsl", NULL, "resources/shaders/wind/f_wind_particle.glsl");
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
@@ -139,6 +145,7 @@ int main()
     Shader sunShader(NULL, "resources/shaders/sun/v_sun.glsl", NULL, "resources/shaders/sun/f_sun.glsl");
     Shader waterHeightShader("resources/shaders/water/grid_height.cs.glsl", NULL, NULL, NULL);
     Shader waterNormalsShader("resources/shaders/water/grid_normals.cs.glsl", NULL, NULL, NULL);
+    Shader skyboxShader(NULL, "resources/shaders/skybox/skybox.vs.glsl", NULL, "resources/shaders/skybox/skybox.fs.glsl");
 
     Model sailboat("resources/models/sailboat/boat.obj");
 
@@ -153,6 +160,42 @@ int main()
         1.0f, 0.0f, 0.0f
     };
     SingleMesh particleMesh(particle_square, { 3 });
+
+    // skybox
+    float skyboxVertices[] =
+    {
+        //   Coordinates
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f
+    };
+
+    unsigned int skyboxIndices[] =
+    {
+        // Right
+        1, 2, 6,
+        6, 5, 1,
+        // Left
+        0, 4, 7,
+        7, 3, 0,
+        // Top
+        4, 5, 6,
+        6, 7, 4,
+        // Bottom
+        0, 3, 2,
+        2, 1, 0,
+        // Back
+        0, 1, 5,
+        5, 4, 0,
+        // Front
+        3, 7, 6,
+        6, 2, 3
+    };
 
     // Generate vertices
     for (int z = 0; z < waterGridRes; ++z) {
@@ -247,6 +290,68 @@ int main()
 
     glBindVertexArray(0);
 
+    // Skybox
+    unsigned int skyboxVAO, skyboxVBO, skyboxEBO;
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glGenBuffers(1, &skyboxEBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skyboxEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(skyboxIndices), &skyboxIndices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    std::string facesCubemap[6] = {
+        "resources/textures/sky_05_2k/cubemap/px.png", // right
+        "resources/textures/sky_05_2k/cubemap/nx.png", // left
+        "resources/textures/sky_05_2k/cubemap/py.png", // up
+        "resources/textures/sky_05_2k/cubemap/ny.png", // down
+        "resources/textures/sky_05_2k/cubemap/pz.png", // front
+        "resources/textures/sky_05_2k/cubemap/nz.png" // back
+    };
+
+    unsigned int cubemapTexture;
+    glGenTextures(1, &cubemapTexture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    for (unsigned int i = 0; i < 6; i++) {
+        int width, height, nrChannels;
+        unsigned char* data = stbi_load(facesCubemap[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data) {
+            stbi_set_flip_vertically_on_load(false);
+            glTexImage2D
+            (
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+                0,
+                GL_RGBA,
+                width,
+                height,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                data
+            );
+            stbi_image_free(data);
+        }
+        else {
+            std::cout << "Failed to load texture: " << facesCubemap[i] << std::endl;
+            stbi_image_free(data);
+        }
+    }
+
+    skyboxShader.use();
+    skyboxShader.setInt("skybox", 0);
+
 
     for (unsigned int i = 0; i < windParticlesNumber; ++i)
         windParticles.push_back(Particle());
@@ -324,12 +429,7 @@ int main()
         float windBearing = glm::degrees(acos(glm::dot(glm::normalize(windDirection), glm::normalize(north)))); // wind direction in degrees where 0 or 360 is north
         float largeWindAngle = sin(glfwGetTime() * windWaveFrequency) * largeScaleWindMaxAngle;
         float largeWindAngleRad = glm::radians(largeWindAngle);
-        //if (largeWindAngleRad < 0.0f) {
-        //    largeWindAngleRad *= 0.4f;
-        //}
-        //else {
-        //    largeWindAngleRad *= 0.6f;
-        //}
+
         glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), largeWindAngleRad, glm::vec3(0.0f, 1.0f, 0.0f));
         glm::vec3 largeWindDirection = glm::vec3(rotationMatrix * glm::vec4(windDirection, 0.0f));
         glm::vec3 temp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -360,6 +460,23 @@ int main()
                     p.Color.a -= deltaTime * 2.5f;
             }
         }
+
+        glm::mat4 view, projection;
+        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        
+        // draw skybox
+        glDepthFunc(GL_LEQUAL);
+        skyboxShader.use();
+        skyboxShader.setMat4("view", glm::mat4(glm::mat3(view)));
+        skyboxShader.setMat4("projection", projection);
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+
+        glDepthFunc(GL_LESS);
 
         // The boat is tilting /////////////////////////////////////////////////////////////
         // 1. Apply movement and rotation (steering)
