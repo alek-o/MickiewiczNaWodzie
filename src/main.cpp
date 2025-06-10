@@ -89,8 +89,6 @@ std::vector<glm::vec4> waterVertices;
 std::vector<glm::vec4> waterNormals(waterGridRes* waterGridRes);
 std::vector<unsigned int> waterIndices;
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 float boatRotate = 0.0f;
 bool boatMove = false;
 const float ROTATION_SPEED = 0.08f;
@@ -103,7 +101,6 @@ float boatHeight(glm::mat4 boatMatrix)
     return sin(boatMatrix[3].x * freq + glfwGetTime()) * cos(boatMatrix[3].z * freq + glfwGetTime()) + 0.37;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
 glm::vec3 boatPos = glm::vec3(0.0f, 0.0f, 0.0f);
 
 int main()
@@ -258,6 +255,8 @@ int main()
     // -- No vertex attributes set up; vertex shader uses gl_VertexID to read from SSBO --
     glBindVertexArray(0);
 
+    // Sun
+
     float sunVertices[] = {
         // positions        // texture coords
         -0.5f, -0.5f, 0.0f,  0.0f, 0.0f,
@@ -304,11 +303,9 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, squareEBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(sunIndices), sunIndices, GL_STATIC_DRAW);
 
-    // Position
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    // Texture Coordinates
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
@@ -348,31 +345,6 @@ int main()
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-    /*for (unsigned int i = 0; i < 6; i++) {
-        int width, height, nrChannels;
-        unsigned char* data = stbi_load(facesCubemap[i].c_str(), &width, &height, &nrChannels, 0);
-        if (data) {
-            stbi_set_flip_vertically_on_load(false);
-            glTexImage2D
-            (
-                GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-                0,
-                GL_RGBA,
-                width,
-                height,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                data
-            );
-            stbi_image_free(data);
-        }
-        else {
-            std::cout << "Failed to load texture: " << facesCubemap[i] << std::endl;
-            stbi_image_free(data);
-        }
-    }*/
-
     for (unsigned int i = 0; i < 6; i++) {
         int width, height, nrChannels;
         stbi_set_flip_vertically_on_load(false);
@@ -380,7 +352,7 @@ int main()
 
         if (!data) {
             std::cerr << "Failed to load cubemap texture: " << facesCubemap[i] << std::endl;
-            continue; // or handle this more strictly
+            continue;
         }
 
         GLenum format;
@@ -404,10 +376,8 @@ int main()
         stbi_image_free(data);
     }
 
-
     skyboxShader.use();
     skyboxShader.setInt("skybox", 0);
-
 
     for (unsigned int i = 0; i < windParticlesNumber; ++i)
         windParticles.push_back(Particle());
@@ -461,7 +431,7 @@ int main()
 
         // sun
 
-        // Compute sun position
+        // compute sun position
         float timeSeconds = glfwGetTime();
         float angle = (timeSeconds / 40.0f) * 2.0f * glm::pi<float>();
         float radius = 40.0f, height = 15.0f;
@@ -479,12 +449,13 @@ int main()
         float t = glm::smoothstep(-0.05f, 0.6f, sunAltitude); // fade from red to yellow as sun rises
         glm::vec3 sunColor = glm::mix(sunsetColorLow, sunsetColorHigh, t);
 
-        // Update sun light color
+        // update sun light color
         sunlight.diffuse = sunColor * 0.8f;
         sunlight.specular = sunColor * 1.0f;
-        sunlight.ambient = sunColor * 0.2f; // warm ambient glow
-        sunlight.direction = glm::normalize(-sunPos); // FROM sun to scene
+        sunlight.ambient = sunColor * 0.2f;
+        sunlight.direction = glm::normalize(-sunPos);
 
+        // rotation of the sun towards the center of the world
         glm::mat4 rot = glm::inverse(glm::lookAt(sunPos, glm::vec3(0), glm::vec3(0, 1, 0)));
         glm::mat4 squareModel = glm::translate(glm::mat4(1.0f), sunPos) * rot;
         squareModel = glm::scale(squareModel, glm::vec3(5.0f));
@@ -494,12 +465,12 @@ int main()
         sunShader.setMat4("projection", projection);
         sunShader.setMat4("model", squareModel);
 
-        // Bind texture
+        // bind texture
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, sunTexture);
-        sunShader.setInt("sunTexture", 0); // ensure uniform exists
+        sunShader.setInt("sunTexture", 0);
 
-        // Draw sun
+        // draw sun
         glBindVertexArray(squareVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
@@ -561,7 +532,7 @@ int main()
         waterShader.setMat4("view", view);
         waterShader.setMat4("projection", projection);
 
-        sunlight.direction = glm::normalize(-sunPos); // direction FROM sun
+        sunlight.direction = glm::normalize(-sunPos); // direction from sun
         waterShader.use();
         waterShader.setVec3("sun.direction", sunlight.direction);
         waterShader.setVec3("sun.ambient", sunlight.ambient);
@@ -777,7 +748,7 @@ void processInput(GLFWwindow* window)
     if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 
-    // Steering the boat
+    // steering the boat
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
         boatRotate = ROTATION_SPEED;
 	else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
