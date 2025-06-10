@@ -13,27 +13,42 @@ struct DirLight {
 };  
 
 uniform DirLight sun;
+uniform DirLight moon;
 uniform vec3 viewPos;
 
 void main() {
     vec3 norm = normalize(vNormal);
-    vec3 lightDir = normalize(-sun.direction);
+    vec3 sunLightDir = normalize(-sun.direction);
+    vec3 moonLightDir = normalize(-moon.direction);
 
-    float aboveHorizon = smoothstep(-0.1, 0.05, dot(-sun.direction, vec3(0.0, 1.0, 0.0)));
+    float sunAboveHorizon = smoothstep(-0.1, 0.05, dot(-sun.direction, vec3(0.0, 1.0, 0.0)));
+    float moonAboveHorizon = smoothstep(-0.1, 0.05, dot(-moon.direction, vec3(0.0, 1.0, 0.0)));
 
     // Ambient
-    vec3 ambient = sun.ambient * aboveHorizon;
+    vec3 sunAmbient = sun.ambient * sunAboveHorizon;
+    vec3 moonAmbient = moon.ambient * moonAboveHorizon;
+
+    vec3 ambient = sunAmbient + moonAmbient;
 
     // Diffuse
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = sun.diffuse * diff * aboveHorizon;
+    float sunDiff = max(dot(norm, sunLightDir), 0.0);
+    vec3 sunDiffuse = sun.diffuse * sunDiff * sunAboveHorizon;
+    float moonDiff = max(dot(norm, moonLightDir), 0.0);
+    vec3 moonDiffuse = moon.diffuse * moonDiff * moonAboveHorizon;
+
+    vec3 diffuse = sunDiffuse + moonDiffuse;
 
     // Specular
     vec3 viewDir = normalize(viewPos - fragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
+    vec3 sunReflectDir = reflect(-sunLightDir, norm);
+    vec3 moonReflectDir = reflect(-moonLightDir, norm);
     
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
-    vec3 specular = sun.specular * spec * aboveHorizon * 0.5;
+    float sunSpec = pow(max(dot(viewDir, sunReflectDir), 0.0), 64.0);
+    vec3 sunSpecular = sun.specular * sunSpec * sunAboveHorizon * 0.5;
+    float moonSpec = pow(max(dot(viewDir, moonReflectDir), 0.0), 64.0);
+    vec3 moonSpecular = moon.specular * moonSpec * moonAboveHorizon * 0.3;
+
+    vec3 specular = sunSpecular + moonSpecular;
 
     // Final color
     vec3 baseColor = vec3(0.35, 0.65, 0.9); // Water blue

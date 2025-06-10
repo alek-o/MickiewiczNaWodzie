@@ -48,8 +48,6 @@ const unsigned int SCR_WIDTH = 1600;
 const unsigned int SCR_HEIGHT = 1200;
 
 // camera
-//glm::vec3 cameraPos = glm::vec3(22.0f, 12.0f, 18.0f);
-//glm::vec3 cameraFront = glm::vec3(-0.8f, -0.2f, -0.6f);
 glm::vec3 cameraPos = glm::vec3(8.27f, 5.23f, 11.14f);
 glm::vec3 cameraFront = glm::vec3(-0.67f, -0.16f, -0.73f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -282,7 +280,7 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     int width, height, nrChannels;
-    unsigned char* data = stbi_load("resources/textures/sun/sun2.png", &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load("resources/textures/sun/sunn.png", &width, &height, &nrChannels, 0);
     if (data) {
         GLenum format = nrChannels == 4 ? GL_RGBA : GL_RGB;
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
@@ -292,6 +290,41 @@ int main()
         std::cerr << "Failed to load sun texture!" << std::endl;
     }
     stbi_image_free(data);
+
+    // moon
+
+    float moonVertices[] = {
+        // positions        // texture coords
+        -0.5f, -0.5f, 0.0f,  0.0f, 0.0f,
+         0.5f, -0.5f, 0.0f,  1.0f, 0.0f,
+         0.5f,  0.5f, 0.0f,  1.0f, 1.0f,
+        -0.5f,  0.5f, 0.0f,  0.0f, 1.0f
+    };
+
+    unsigned int moonIndices[] = {
+        0, 1, 2,
+        0, 2, 3
+    };
+
+    unsigned int moonTexture;
+    glGenTextures(1, &moonTexture);
+    glBindTexture(GL_TEXTURE_2D, moonTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    int moonwidth, moonheight, moonnrChannels;
+    unsigned char* moondata = stbi_load("resources/textures/sun/moonn.png", &moonwidth, &moonheight, &moonnrChannels, 0);
+    if (moondata) {
+        GLenum moonformat = moonnrChannels == 4 ? GL_RGBA : GL_RGB;
+        glTexImage2D(GL_TEXTURE_2D, 0, moonformat, moonwidth, moonheight, 0, moonformat, GL_UNSIGNED_BYTE, moondata);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else {
+        std::cerr << "Failed to load sun texture!" << std::endl;
+    }
+    stbi_image_free(moondata);
 
     unsigned int squareVAO, squareVBO, squareEBO;
     glGenVertexArrays(1, &squareVAO);
@@ -396,6 +429,17 @@ int main()
     waterShader.setVec3("sun.diffuse", sunlight.diffuse);
     waterShader.setVec3("sun.specular", sunlight.specular);
 
+    DirLight moonlight;
+    moonlight.direction = glm::normalize(glm::vec3(-1.0f, -2.0f, -1.0f));
+    moonlight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
+    moonlight.diffuse = glm::vec3(0.7f, 0.7f, 0.7f);
+    moonlight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
+    waterShader.use();
+    waterShader.setVec3("moon.direction", moonlight.direction);
+    waterShader.setVec3("moon.ambient", moonlight.ambient);
+    waterShader.setVec3("moon.diffuse", moonlight.diffuse);
+    waterShader.setVec3("moon.specular", moonlight.specular);
+
 	glm::mat4 worldMatrix = glm::mat4(1.0f);
     glm::mat4 islandMatrix = worldMatrix;
     islandMatrix = glm::translate(worldMatrix, glm::vec3(40.0f, -1.0f, 100.0f));
@@ -432,10 +476,12 @@ int main()
         view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
 
+        // sun
+        
         // compute sun position
         float timeSeconds = glfwGetTime();
-        float angle = (timeSeconds / 40.0f) * 2.0f * glm::pi<float>();
-        float radius = 40.0f, height = 15.0f;
+        float angle = (timeSeconds / 20.0f) * 2.0f * glm::pi<float>();
+        float radius = 45.0f, height = 15.0f;
 
         glm::vec3 sunPos(radius * cos(angle), height * sin(angle), radius * sin(angle));
 
@@ -472,6 +518,34 @@ int main()
         sunShader.setInt("sunTexture", 0);
 
         // draw sun
+        glBindVertexArray(squareVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+
+        // moon
+
+		glm::vec3 moonPos = -sunPos; // moon is opposite to the sun
+
+        glm::vec3 moonColor = glm::vec3(0.6f, 0.6f, 0.8f);
+
+        moonlight.diffuse = moonColor * 0.6f;
+        moonlight.specular = moonColor * 0.8f;
+        moonlight.ambient = moonColor * 0.2f;
+        moonlight.direction = glm::normalize(-moonPos);
+
+        glm::mat4 moonRot = glm::inverse(glm::lookAt(moonPos, glm::vec3(0), glm::vec3(0, 1, 0)));
+        glm::mat4 moonModel = glm::translate(glm::mat4(1.0f), moonPos) * moonRot;
+        moonModel = glm::scale(moonModel, glm::vec3(4.5f)); // smaller than sun
+
+        sunShader.use();
+        sunShader.setMat4("view", view);
+        sunShader.setMat4("projection", projection);
+        sunShader.setMat4("model", moonModel);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, moonTexture);
+        sunShader.setInt("sunTexture", 0);
+
         glBindVertexArray(squareVAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
@@ -533,17 +607,6 @@ int main()
 
         glDepthFunc(GL_LESS);
 
-        waterShader.setMat4("view", view);
-        waterShader.setMat4("projection", projection);
-
-        sunlight.direction = glm::normalize(-sunPos); // direction from sun
-        waterShader.use();
-        waterShader.setVec3("sun.direction", sunlight.direction);
-        waterShader.setVec3("sun.ambient", sunlight.ambient);
-        waterShader.setVec3("sun.diffuse", sunlight.diffuse);
-        waterShader.setVec3("sun.specular", sunlight.specular);
-        waterShader.setVec3("viewPos", cameraPos); // for specular highlights
-
         // water calculations
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, waterVertSSBO);
 
@@ -569,6 +632,15 @@ int main()
         waterShader.setMat4("view", view);
         waterShader.setMat4("projection", projection);
         waterShader.setMat4("model", waterModel);
+        waterShader.setVec3("sun.direction", sunlight.direction);
+        waterShader.setVec3("sun.ambient", sunlight.ambient);
+        waterShader.setVec3("sun.diffuse", sunlight.diffuse);
+        waterShader.setVec3("sun.specular", sunlight.specular);
+
+		waterShader.setVec3("moon.direction", moonlight.direction);
+		waterShader.setVec3("moon.ambient", moonlight.ambient);
+		waterShader.setVec3("moon.diffuse", moonlight.diffuse);
+		waterShader.setVec3("moon.specular", moonlight.specular);
         waterShader.setFloat("time", glfwGetTime());
         waterShader.setVec3("viewPos", cameraPos);
         glBindVertexArray(WaterVAO);
@@ -601,6 +673,10 @@ int main()
         sharkShader.setVec3("sun.ambient", sunlight.ambient);
         sharkShader.setVec3("sun.diffuse", sunlight.diffuse);
         sharkShader.setVec3("sun.specular", sunlight.specular);
+		sharkShader.setVec3("moon.direction", moonlight.direction);
+		sharkShader.setVec3("moon.ambient", moonlight.ambient);
+		sharkShader.setVec3("moon.diffuse", moonlight.diffuse);
+		sharkShader.setVec3("moon.specular", moonlight.specular);
         sharkShader.setVec3("viewPos", cameraPos);
         sharkShader.setMat4("view", view);
         sharkShader.setMat4("projection", projection);
@@ -633,6 +709,10 @@ int main()
         boatShader.setVec3("sun.ambient", sunlight.ambient);
         boatShader.setVec3("sun.diffuse", sunlight.diffuse);
         boatShader.setVec3("sun.specular", sunlight.specular);
+		boatShader.setVec3("moon.direction", moonlight.direction);
+		boatShader.setVec3("moon.ambient", moonlight.ambient);
+		boatShader.setVec3("moon.diffuse", moonlight.diffuse);
+		boatShader.setVec3("moon.specular", moonlight.specular);
         boatShader.setVec3("viewPos", cameraPos);
         boatShader.setMat4("view", view);
         boatShader.setMat4("projection", projection);
@@ -644,6 +724,10 @@ int main()
         islandShader.setVec3("sun.ambient", sunlight.ambient);
         islandShader.setVec3("sun.diffuse", sunlight.diffuse);
         islandShader.setVec3("sun.specular", sunlight.specular);
+		islandShader.setVec3("moon.direction", moonlight.direction);
+		islandShader.setVec3("moon.ambient", moonlight.ambient);
+		islandShader.setVec3("moon.diffuse", moonlight.diffuse);
+		islandShader.setVec3("moon.specular", moonlight.specular);
         islandShader.setVec3("viewPos", cameraPos);
         islandShader.setMat4("view", view);
         islandShader.setMat4("projection", projection);

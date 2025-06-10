@@ -15,27 +15,44 @@ out vec4 FragColor;
 
 uniform sampler2D texture_diffuse1;
 uniform DirLight sun;
+uniform DirLight moon;
 uniform vec3 viewPos;
+
 
 void main()
 {
     vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(-sun.direction);
+    vec3 sunLightDir = normalize(-sun.direction);
+    vec3 moonLightDir = normalize(-moon.direction);
 
-    float aboveHorizon = smoothstep(-0.1, 0.05, dot(-sun.direction, vec3(0.0, 1.0, 0.0)));
+    float sunAboveHorizon = smoothstep(-0.1, 0.05, dot(-sun.direction, vec3(0.0, 1.0, 0.0)));
+    float moonAboveHorizon = smoothstep(-0.1, 0.05, dot(-moon.direction, vec3(0.0, 1.0, 0.0)));
 
     // Ambient
-    vec3 ambient = sun.ambient * texture(texture_diffuse1, TexCoord).rgb * aboveHorizon;
-
+    vec3 sunAmbient = sun.ambient * texture(texture_diffuse1, TexCoord).rgb * sunAboveHorizon;
+    vec3 moonAmbient = moon.ambient * texture(texture_diffuse1, TexCoord).rgb * moonAboveHorizon;
+    
+    vec3 ambient = sunAmbient + moonAmbient;
+    
     // Diffuse
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = sun.diffuse * diff * texture(texture_diffuse1, TexCoord).rgb * aboveHorizon;
+    float sunDiff = max(dot(norm, sunLightDir), 0.0);
+    vec3 sunDiffuse = sun.diffuse * sunDiff * sunAboveHorizon * texture(texture_diffuse1, TexCoord).rgb;
+    float moonDiff = max(dot(norm, moonLightDir), 0.0);
+    vec3 moonDiffuse = moon.diffuse * moonDiff * moonAboveHorizon * texture(texture_diffuse1, TexCoord).rgb;
+
+    vec3 diffuse = sunDiffuse + moonDiffuse;
 
     // Specular
     vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
-    vec3 specular = sun.specular * spec * aboveHorizon;
+    vec3 sunReflectDir = reflect(-sunLightDir, norm);
+    vec3 moonReflectDir = reflect(-moonLightDir, norm);
+
+    float sunSpec = pow(max(dot(viewDir, sunReflectDir), 0.0), 64.0);
+    vec3 sunSpecular = sun.specular * sunSpec * sunAboveHorizon;
+    float moonSpec = pow(max(dot(viewDir, moonReflectDir), 0.0), 64.0);
+    vec3 moonSpecular = moon.specular * moonSpec * moonAboveHorizon;
+
+    vec3 specular = sunSpecular + moonSpecular;
 
     vec3 result = ambient + diffuse + specular;
     FragColor = vec4(result, 1.0);
