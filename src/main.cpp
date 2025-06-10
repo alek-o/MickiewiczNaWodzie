@@ -78,10 +78,10 @@ glm::vec3 windDirection = glm::normalize(glm::vec3(-1.0f, 0.0f, -1.0f));
 glm::vec3 north = glm::vec3(0, 0, 1);
 
 std::vector<Particle> windParticles;
-unsigned int windParticlesNumber = 100;
+unsigned int windParticlesNumber = 500;
 unsigned int lastUsedWindParticle = 0;
-float windParticleSpawnProbability = 0.002f;
-float windParticleLife = 6.0f;
+float windParticleSpawnProbability = 0.004f;
+float windParticleLife = 9.0f;
 
 // water
 const int waterGridRes = 300; // Grid resolution
@@ -784,10 +784,9 @@ unsigned int FirstUnusedWindParticle()
 // not in a way that would make them go into the camera
 void RespawnParticle(Particle& particle)
 {
-    float maxDistanceAgainstWind = 16.0f;
+    float maxDistanceAgainstWind = 22.0f;
     float minDistanceFromCamera = 8.0f;
-    float tunnelWidth = 8.0f;
-    float particleLife = 7.0f;
+    float tunnelWidth = 14.0f;
 
     float rColor = 0.8f + ((rand() % 100) / 1000.0f);
     float particleHeight = getRandomFloat(0.2f, 4.2f);
@@ -802,7 +801,7 @@ void RespawnParticle(Particle& particle)
     particle.Position = boatPos + offset; // should be: cameraPos + offset
     //particle.Color = glm::vec4(rColor, rColor, rColor, 1.0f);
     particle.Color = glm::vec4(rColor, rColor, rColor, 0.0f);
-    particle.Life = particleLife;
+    particle.Life = windParticleLife;
     particle.Velocity = windDirection * 0.5f;
     particle.Seed = getRandomFloat(-1.0f * _Pi_val, 1.0f * _Pi_val);
 }
