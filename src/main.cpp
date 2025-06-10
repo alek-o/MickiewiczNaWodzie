@@ -586,6 +586,8 @@ int main()
             {
                 particleShader.setMat4("view", view);
                 particleShader.setMat4("projection", projection);
+                particleShader.setVec3("sun.direction", sunlight.direction);
+                particleShader.setVec3("sun.ambient", sunlight.ambient);
                 glm::mat4 particleModel = glm::mat4(1.0f);
                 particleModel = glm::translate(particleModel, particle.Position);
                 particleModel = glm::scale(particleModel, glm::vec3(0.3f)); // size of particle
