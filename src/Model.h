@@ -82,15 +82,6 @@ private:
 
         for (unsigned int i = 0; i < mesh->mNumVertices; i++)
         {
-            //if (mesh->HasPositions()) std::cout << mesh->mName.C_Str() << " has positions\n";
-            //if (mesh->HasNormals()) std::cout << mesh->mName.C_Str() << " has normals\n";
-            //if (mesh->HasTextureCoords(0)) std::cout << mesh->mName.C_Str() << " has texcoords\n";
-            //if (mesh->HasTextureCoordsName(0)) std::cout << mesh->mName.C_Str() << " has texcoordsname\n";
-            //if (mesh->HasFaces()) std::cout << mesh->mName.C_Str() << " has faces\n";
-            //if (mesh->HasVertexColors(0)) std::cout << mesh->mName.C_Str() << " has vertex colors\n";
-            //if (mesh->HasTangentsAndBitangents()) std::cout << mesh->mName.C_Str() << " has tangents and bitangents\n";
-            //if (mesh->HasBones()) std::cout << mesh->mName.C_Str() << " has bones\n";
-
             Vertex vertex;
             glm::vec3 vector; 
             vector.x = mesh->mVertices[i].x;
