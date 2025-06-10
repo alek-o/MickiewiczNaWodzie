@@ -147,9 +147,11 @@ int main()
     Shader waterHeightShader("resources/shaders/water/grid_height.cs.glsl", NULL, NULL, NULL);
     Shader waterNormalsShader("resources/shaders/water/grid_normals.cs.glsl", NULL, NULL, NULL);
     Shader skyboxShader(NULL, "resources/shaders/skybox/skybox.vs.glsl", NULL, "resources/shaders/skybox/skybox.fs.glsl");
+    Shader sharkShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
 
     Model sailboat("resources/models/sailboat/boat.obj");
 	Model island("resources/models/island/island.obj");
+    Model shark("resources/models/shark/shark.obj");
 
     // particle mesh
     float particle_square[] = {
@@ -593,6 +595,22 @@ int main()
             }
         }
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        sharkShader.use();
+        sharkShader.setVec3("sun.direction", sunlight.direction);
+        sharkShader.setVec3("sun.ambient", sunlight.ambient);
+        sharkShader.setVec3("sun.diffuse", sunlight.diffuse);
+        sharkShader.setVec3("sun.specular", sunlight.specular);
+        sharkShader.setVec3("viewPos", cameraPos);
+        sharkShader.setMat4("view", view);
+        sharkShader.setMat4("projection", projection);
+        glm::mat4 sharkMatrix = glm::mat4(1.0f);
+        sharkMatrix = glm::rotate(sharkMatrix, glm::radians((float)glfwGetTime() * 50.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        sharkMatrix = glm::translate(sharkMatrix, glm::vec3(0.0f, 0.0f, 8.0f));
+        sharkMatrix = glm::translate(sharkMatrix, glm::vec3(0.0f, -1.0f, 0.0f));
+        sharkMatrix = glm::scale(sharkMatrix, glm::vec3(10.0f));
+        sharkShader.setMat4("model", sharkMatrix);
+        shark.Draw(sharkShader);
 
         // boat position for wind particles spawnpoint calculation
         glm::mat4 boatFront = glm::translate(boatMatrix, glm::vec3(0.0f, 0.0f, 5.0f));
