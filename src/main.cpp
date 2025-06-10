@@ -280,7 +280,7 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     int width, height, nrChannels;
-    unsigned char* data = stbi_load("resources/textures/sun/sun.png", &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load("resources/textures/sun/sun2.png", &width, &height, &nrChannels, 0);
     if (data) {
         GLenum format = nrChannels == 4 ? GL_RGBA : GL_RGB;
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
@@ -487,7 +487,7 @@ int main()
 
         glm::mat4 rot = glm::inverse(glm::lookAt(sunPos, glm::vec3(0), glm::vec3(0, 1, 0)));
         glm::mat4 squareModel = glm::translate(glm::mat4(1.0f), sunPos) * rot;
-        squareModel = glm::scale(squareModel, glm::vec3(6.0f));
+        squareModel = glm::scale(squareModel, glm::vec3(5.0f));
 
         sunShader.use();
         sunShader.setMat4("view", view);
