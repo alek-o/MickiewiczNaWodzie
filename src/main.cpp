@@ -1,4 +1,4 @@
-#include <glad.h>
+﻿#include <glad.h>
 #include <glfw/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -81,8 +81,8 @@ unsigned int lastUsedWindParticle = 0;
 float windParticleSpawnProbability = 0.03f;
 
 // water
-const int waterGridRes = 32; // Grid resolution
-const int waterGridSize = 40; // Width/height of the grid
+const int waterGridRes = 256; // Grid resolution
+const int waterGridSize = 200; // Width/height of the grid
 std::vector<glm::vec4> waterVertices;
 std::vector<glm::vec4> waterNormals(waterGridRes* waterGridRes);
 std::vector<unsigned int> waterIndices;
@@ -100,9 +100,9 @@ float boatHeight(glm::vec3 boatMatrix)
 	// boatMatrix[3] - the translation vector of the boat in world space
     return sin(boatMatrix.x * freq + glfwGetTime()) * cos(boatMatrix.z * freq + glfwGetTime()) + 0.37;
 }
-glm::vec3 boatPos = glm::vec3(0.0f, 0.0f, 0.0f);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
+glm::vec3 boatPos = glm::vec3(0.0f, 0.0f, 0.0f);
 
 int main()
 {
@@ -136,6 +136,7 @@ int main()
     Shader particleShader(NULL, "resources/shaders/wind/v_wind_particle.glsl", NULL, "resources/shaders/wind/f_wind_particle.glsl");
     Shader waterShader(NULL, "resources/shaders/water/grid.vs.glsl", NULL, "resources/shaders/water/grid.fs.glsl");
     Shader boatShader(NULL, "resources/shaders/assimp.v.glsl", NULL, "resources/shaders/assimp.f.glsl");
+    Shader sunShader(NULL, "resources/shaders/sun/v_sun.glsl", NULL, "resources/shaders/sun/f_sun.glsl");
     Shader waterHeightShader("resources/shaders/water/grid_height.cs.glsl", NULL, NULL, NULL);
     Shader waterNormalsShader("resources/shaders/water/grid_normals.cs.glsl", NULL, NULL, NULL);
 
@@ -210,6 +211,42 @@ int main()
     // -- No vertex attributes set up; vertex shader uses gl_VertexID to read from SSBO --
     glBindVertexArray(0);
 
+    float sunVertices[] = {
+        // Współrzędne wierzchołków (x, y, z) oraz kolory (r, g, b)
+        -0.5f, -0.5f, 0.0f,  1.0f, 1.0f, 0.0f,
+         0.5f, -0.5f, 0.0f,  1.0f, 1.0f, 0.0f,
+         0.5f,  0.5f, 0.0f,  1.0f, 1.0f, 0.0f,
+        -0.5f,  0.5f, 0.0f,  1.0f, 1.0f, 0.0f
+    };
+
+    unsigned int sunIndices[] = {
+        0, 1, 2,
+        0, 2, 3
+    };
+
+    unsigned int squareVAO, squareVBO, squareEBO;
+    glGenVertexArrays(1, &squareVAO);
+    glGenBuffers(1, &squareVBO);
+    glGenBuffers(1, &squareEBO);
+
+    glBindVertexArray(squareVAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, squareVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(sunVertices), sunVertices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, squareEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(sunIndices), sunIndices, GL_STATIC_DRAW);
+
+    // Pozycje wierzchołków
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // Kolory wierzchołków
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glBindVertexArray(0);
+
 
     for (unsigned int i = 0; i < windParticlesNumber; ++i)
         windParticles.push_back(Particle());
@@ -244,6 +281,44 @@ int main()
         // render
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glm::mat4 view, projection;
+        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+
+        // sun
+
+        // Get current time
+        float timeSeconds = glfwGetTime(); // or your own time mechanism
+
+        // Compute angle (full circle = 2π = 360° over 10 seconds)
+        float angle = (timeSeconds / 40.0f) * 2.0f * glm::pi<float>();
+
+        // Sun orbit radius and height
+        float radius = 100.0f;
+        float height = 60.0f;
+
+        // Position on the circular orbit
+        float x = radius * cos(angle);
+        float z = radius * sin(angle);
+        float y = height * sin(angle); // Optional: sun rises and sets
+
+        // Setup transformation
+        glm::mat4 squareModel = glm::mat4(1.0f);
+        squareModel = glm::translate(squareModel, glm::vec3(x, y, z));
+        squareModel = glm::scale(squareModel, glm::vec3(6.0f)); // Size of sun
+
+        // Send matrices
+        sunShader.use();
+        sunShader.setMat4("view", view);
+        sunShader.setMat4("projection", projection);
+        sunShader.setMat4("model", squareModel);
+
+        // Draw sun
+        glBindVertexArray(squareVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+
 
         // wind
         float windBearing = glm::degrees(acos(glm::dot(glm::normalize(windDirection), glm::normalize(north)))); // wind direction in degrees where 0 or 360 is north
@@ -286,10 +361,6 @@ int main()
             }
         }
 
-        glm::mat4 view, projection;
-        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-        projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-
         // The boat is tilting /////////////////////////////////////////////////////////////
         // 1. Apply movement and rotation (steering)
         boatMatrix = glm::translate(boatMatrix, glm::vec3(0, 0, boatMove)); // move boat forward
@@ -331,7 +402,7 @@ int main()
         sailboat.Draw(boatShader);
 
         // boat position for wind particles spawnpoint calculation
-        glm::mat4 boatFront = glm::translate(boatModel, glm::vec3(0.0f, 0.0f, 5.0f));
+        glm::mat4 boatFront = glm::translate(boatMatrix, glm::vec3(0.0f, 0.0f, 5.0f));
         boatPos = glm::vec3(boatFront[3]);
 
 
